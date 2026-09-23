@@ -147,11 +147,26 @@ class AudioPlayerBottomBar extends ConsumerWidget {
         );
         if (!isReady) return;
 
-        final lastAttempted = ref.read(quranAudioControllerProvider).lastAttemptedAyahNumber;
         final ayahs = ref.read(quranReaderControllerProvider).ayahs;
         
-        // Use last attempted ayah if available, otherwise use the first visible ayah
-        final startAyah = lastAttempted ?? (ayahs.isNotEmpty ? ayahs.first.ayahNumber : 1);
+        final itemPositionsListener = ref.read(activeItemPositionsListenerProvider);
+        int? visibleAyahNumber;
+        if (itemPositionsListener != null && ayahs.isNotEmpty) {
+          final positions = itemPositionsListener.itemPositions.value;
+          if (positions.isNotEmpty) {
+            final visiblePositions = positions.where((p) => p.itemTrailingEdge > 0.05);
+            if (visiblePositions.isNotEmpty) {
+              final topPosition = visiblePositions.reduce((min, p) => p.index < min.index ? p : min);
+              final index = topPosition.index.clamp(0, ayahs.length - 1);
+              visibleAyahNumber = ayahs[index].ayahNumber;
+            }
+          }
+        }
+
+        // Prioritize the Ayah currently visible on screen; fallback to last attempted or first ayah
+        final startAyah = visibleAyahNumber ??
+            ref.read(quranAudioControllerProvider).lastAttemptedAyahNumber ??
+            (ayahs.isNotEmpty ? ayahs.first.ayahNumber : 1);
         
         audioController.playAyah(
           surahId: surahId,

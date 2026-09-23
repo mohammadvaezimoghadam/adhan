@@ -9,6 +9,7 @@ import '../../../../common/utils/arabic_text_helper.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../quran_reader/application/controllers/quran_display_settings_controller.dart';
+import '../../../quran_reader/domain/entities/ayah_theme_entity.dart';
 import '../../application/controllers/ayah_translation_provider.dart';
 import 'translation_skeleton.dart';
 
@@ -67,10 +68,18 @@ class AyahTranslationText extends ConsumerWidget {
     final ayahNumStr = isRtl ? ayahNumber.toPersianDigit() : ayahNumber.toString();
 
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final textColor = isActive
-        ? colorScheme.onSurface
-        : colorScheme.onSurfaceVariant;
+    final ayahThemeId = ref.watch(
+      quranDisplaySettingsControllerProvider.select((s) => s.ayahThemeId),
+    );
+    final activeTheme = AyahThemePresets.getById(ayahThemeId);
+
+    final textColor = activeTheme.isDark
+        ? (isActive ? Colors.white : Colors.white.withValues(alpha: 0.72))
+        : (isDark && !activeTheme.isDark
+            ? (isActive ? const Color(0xFF1C1B1B) : const Color(0xFF3E4947))
+            : (isActive ? colorScheme.onSurface : colorScheme.onSurfaceVariant));
 
     final style = AppTypography.translationText.copyWith(
       fontFamily: translationFontFamily,

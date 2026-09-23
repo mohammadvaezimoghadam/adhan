@@ -10,6 +10,7 @@ import '../../application/controllers/quran_audio_controller.dart';
 import '../../application/controllers/quran_display_settings_controller.dart';
 import '../../application/controllers/quran_reader_controller.dart';
 import '../../domain/entities/ayah_entity.dart';
+import '../../domain/entities/ayah_theme_entity.dart';
 import '../../../quran_home/application/controllers/continue_reading_controller.dart';
 import 'ayah_list_item.dart';
 
@@ -184,43 +185,56 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
     });
 
     final state = ref.watch(quranReaderControllerProvider);
+    final ayahThemeId = ref.watch(
+      quranDisplaySettingsControllerProvider.select((s) => s.ayahThemeId),
+    );
+    final activeTheme = AyahThemePresets.getById(ayahThemeId);
 
     if (state.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return ColoredBox(
+        color: activeTheme.evenColor,
+        child: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (state.errorMessage != null && state.ayahs.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              AppConstants.ayahLoadError,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0),
-              child: Text(
-                state.errorMessage!,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
+      return ColoredBox(
+        color: activeTheme.evenColor,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                AppConstants.ayahLoadError,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Text(
+                  state.errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => ref.read(quranReaderControllerProvider.notifier).retry(),
-              child: const Text(AppConstants.retryButtonLabel),
-            ),
-          ],
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => ref.read(quranReaderControllerProvider.notifier).retry(),
+                child: const Text(AppConstants.retryButtonLabel),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     if (state.ayahs.isEmpty) {
-      return const Center(child: Text(AppConstants.noAyahFound));
+      return ColoredBox(
+        color: activeTheme.evenColor,
+        child: const Center(child: Text(AppConstants.noAyahFound)),
+      );
     }
 
     // Check if there is a pending navigation target for this surah
@@ -339,75 +353,86 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
       },
     );
 
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        final isUserDrag = (notification is ScrollStartNotification && notification.dragDetails != null) ||
-            (notification is ScrollUpdateNotification && notification.dragDetails != null);
-        if (isUserDrag) {
-          final audioState = ref.read(quranAudioControllerProvider);
-          final hasActiveSession = audioState.status == AudioStatus.playing || audioState.status == AudioStatus.paused;
-          final isThisSurah = audioState.currentSurahId == widget.surahId;
-          if (hasActiveSession && isThisSurah) {
-            ref.read(quranAudioControllerProvider.notifier).suspendAutoScroll();
-          }
-        }
-        
-        // Track reading progress on scroll end
-        if (notification is ScrollEndNotification) {
-          final positions = _itemPositionsListener.itemPositions.value;
-          if (positions.isNotEmpty && state.ayahs.isNotEmpty) {
-            // Find the item that is currently near the top (index 0)
-            final firstVisible = positions.reduce((min, position) =>
-                position.itemLeadingEdge < min.itemLeadingEdge ? position : min);
-            
-            final index = firstVisible.index;
-            if (index >= 0 && index < state.ayahs.length) {
-              final ayah = state.ayahs[index];
-              ref.read(continueReadingControllerProvider.notifier).updateStateInMemory(
-                surahId: widget.surahId,
-                surahName: widget.surahName,
-                ayahNumber: ayah.ayahNumber,
-                totalAyahs: state.ayahs.length,
-              );
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      color: activeTheme.evenColor,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          final isUserDrag = (notification is ScrollStartNotification && notification.dragDetails != null) ||
+              (notification is ScrollUpdateNotification && notification.dragDetails != null);
+          if (isUserDrag) {
+            final audioState = ref.read(quranAudioControllerProvider);
+            final hasActiveSession = audioState.status == AudioStatus.playing || audioState.status == AudioStatus.paused;
+            final isThisSurah = audioState.currentSurahId == widget.surahId;
+            if (hasActiveSession && isThisSurah) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                ref.read(quranAudioControllerProvider.notifier).suspendAutoScroll();
+              });
             }
           }
-        }
-        return false;
-      },
-      child: ScrollablePositionedList.builder(
-        key: ValueKey('surah_list_${widget.surahId}'),
-        initialScrollIndex: _getInitialScrollIndex(state.ayahs),
-        itemScrollController: _itemScrollController,
-        itemPositionsListener: _itemPositionsListener,
-        padding: EdgeInsets.only(
-          left: 0.0,
-          right: 0.0,
-          top: 0.0,
-          bottom: MediaQuery.paddingOf(context).bottom + 140,
-        ),
-        itemCount: state.ayahs.length,
-        itemBuilder: (context, index) {
-          final ayah = state.ayahs[index];
-          final previousAyah = index > 0 ? state.ayahs[index - 1] : null;
           
-          final isPageStart = previousAyah == null || previousAyah.page != ayah.page;
-          final isJuzStart = (previousAyah != null)
-              ? (ayah.juz != null && previousAyah.juz != ayah.juz)
-              : (ayah.juz != null);
-          final isHizbStart = (previousAyah != null)
-              ? (ayah.hizb != null && previousAyah.hizb != ayah.hizb)
-              : (ayah.hizb != null);
-          
-          return AyahListItem(
-            ayah: ayah,
-            surahName: widget.surahName,
-            totalAyahsInSurah: state.ayahs.length,
-            isPageStart: isPageStart,
-            isJuzStart: isJuzStart,
-            isHizbStart: isHizbStart,
-            translationId: widget.translationId,
-          );
+          // Track reading progress on scroll end
+          if (notification is ScrollEndNotification) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              final positions = _itemPositionsListener.itemPositions.value;
+              if (positions.isNotEmpty && state.ayahs.isNotEmpty) {
+                // Find the item that is currently near the top (index 0)
+                final firstVisible = positions.reduce((min, position) =>
+                    position.itemLeadingEdge < min.itemLeadingEdge ? position : min);
+                
+                final index = firstVisible.index;
+                if (index >= 0 && index < state.ayahs.length) {
+                  final ayah = state.ayahs[index];
+                  ref.read(continueReadingControllerProvider.notifier).updateStateInMemory(
+                    surahId: widget.surahId,
+                    surahName: widget.surahName,
+                    ayahNumber: ayah.ayahNumber,
+                    totalAyahs: state.ayahs.length,
+                  );
+                }
+              }
+            });
+          }
+          return false;
         },
+        child: ScrollablePositionedList.builder(
+          key: ValueKey('surah_list_${widget.surahId}'),
+          initialScrollIndex: _getInitialScrollIndex(state.ayahs),
+          itemScrollController: _itemScrollController,
+          itemPositionsListener: _itemPositionsListener,
+          padding: EdgeInsets.only(
+            left: 0.0,
+            right: 0.0,
+            top: 0.0,
+            bottom: MediaQuery.paddingOf(context).bottom + 140,
+          ),
+          itemCount: state.ayahs.length,
+          itemBuilder: (context, index) {
+            final ayah = state.ayahs[index];
+            final previousAyah = index > 0 ? state.ayahs[index - 1] : null;
+            
+            final isPageStart = previousAyah == null || previousAyah.page != ayah.page;
+            final isJuzStart = (previousAyah != null)
+                ? (ayah.juz != null && previousAyah.juz != ayah.juz)
+                : (ayah.juz != null);
+            final isHizbStart = (previousAyah != null)
+                ? (ayah.hizb != null && previousAyah.hizb != ayah.hizb)
+                : (ayah.hizb != null);
+            
+            return AyahListItem(
+              ayah: ayah,
+              surahName: widget.surahName,
+              totalAyahsInSurah: state.ayahs.length,
+              isPageStart: isPageStart,
+              isJuzStart: isJuzStart,
+              isHizbStart: isHizbStart,
+              translationId: widget.translationId,
+            );
+          },
+        ),
       ),
     );
   }

@@ -14,6 +14,8 @@ abstract final class PreferencesKeys {
   static const String translatorName = 'quran_translator_name';
   static const String harakatColor = 'quran_harakat_color';
   static const String removeTranslationBrackets = 'quran_remove_translation_brackets';
+  static const String ayahThemeId = 'quran_ayah_theme_id';
+  static const String ayahThemeSolid = 'quran_ayah_theme_solid';
 
   // Selected Preferences Keys
   static const String selectedReciterId = 'quran_selected_reciter_id';

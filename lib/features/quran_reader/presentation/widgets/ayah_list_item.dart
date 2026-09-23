@@ -1,9 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../common/extensions/int_extension.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/services/audio/audio_player_state.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../translation_manager/presentation/widgets/ayah_translation_text.dart';
@@ -12,7 +13,9 @@ import '../../application/controllers/quran_display_settings_controller.dart';
 import '../../application/controllers/quran_reader_controller.dart';
 import '../../application/controllers/selected_ayah_action_provider.dart';
 import '../../domain/entities/ayah_entity.dart';
+import '../../domain/entities/ayah_theme_entity.dart';
 import '../../../../common/widgets/smart_selection_area.dart';
+import '../utils/reciter_download_helper.dart';
 import 'ayah_arabic_text.dart';
 import 'quran_ornamental_divider.dart';
 import 'single_ayah_action_bottom_sheet.dart';
@@ -88,22 +91,30 @@ class AyahListItem extends ConsumerWidget {
     final isAudioActive = isPlayingAyah && autoHighlight;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final Color defaultBgColor = isDark
-        ? (ayah.ayahNumber % 2 != 0
-            ? AppColors.ayahBackgroundOddDark
-            : AppColors.ayahBackgroundEvenDark)
-        : (ayah.ayahNumber % 2 != 0
-            ? AppColors.ayahBackgroundOddLight
-            : AppColors.ayahBackgroundEvenLight);
+    final ayahThemeId = ref.watch(
+      quranDisplaySettingsControllerProvider.select((s) => s.ayahThemeId),
+    );
+    final isAyahThemeSolid = ref.watch(
+      quranDisplaySettingsControllerProvider.select((s) => s.isAyahThemeSolid),
+    );
+    final activeTheme = AyahThemePresets.getById(ayahThemeId);
+    final Color defaultBgColor = activeTheme.getBackgroundColor(
+      isOdd: ayah.ayahNumber % 2 != 0,
+      isSolid: isAyahThemeSolid,
+    );
 
     final Color effectiveBgColor = isAudioActive
         ? Color.alphaBlend(
-            colorScheme.primary.withValues(alpha: isDark ? 0.36 : 0.22),
+            colorScheme.primary.withValues(
+              alpha: isDark || activeTheme.isDark ? 0.36 : 0.22,
+            ),
             defaultBgColor,
           )
         : (isSelectedForAction
             ? Color.alphaBlend(
-                colorScheme.primary.withValues(alpha: isDark ? 0.28 : 0.14),
+                colorScheme.primary.withValues(
+                  alpha: isDark || activeTheme.isDark ? 0.28 : 0.14,
+                ),
                 defaultBgColor,
               )
             : defaultBgColor);
@@ -136,12 +147,51 @@ class AyahListItem extends ConsumerWidget {
         ref.read(readerControlsProvider.notifier).toggleControls();
         return;
       }
-      return;
+    }
+
+    Future<void> handleDoubleTap() async {
+      // UX INTERCEPT: If text is actively selected or selection mode is active, do nothing
+      if (SmartSelectionArea.hasGlobalSelection) {
+        FocusManager.instance.primaryFocus?.unfocus();
+        SmartSelectionArea.hasGlobalSelection = false;
+        return;
+      }
+
+      final currentSelected = ref.read(selectedAyahActionProvider);
+      if (currentSelected.isNotEmpty) {
+        return;
+      }
+
+      HapticFeedback.lightImpact();
+
+      final audioState = ref.read(quranAudioControllerProvider);
+      final isAudioPlayingNow = audioState.status == AudioStatus.playing &&
+          audioState.currentSurahId == ayah.surahId &&
+          audioState.currentAyahNumber == ayah.ayahNumber;
+
+      final controller = ref.read(quranAudioControllerProvider.notifier);
+      if (isAudioPlayingNow) {
+        controller.pause();
+      } else {
+        final isReady = await ReciterDownloadHelper.checkAndPromptForPlayback(
+          context: context,
+          surahId: ayah.surahId,
+        );
+        if (isReady && context.mounted) {
+          controller.resumeAutoScrollAndSync();
+          controller.playAyah(
+            surahId: ayah.surahId,
+            ayahNumber: ayah.ayahNumber,
+            totalAyahsInSurah: totalAyahsInSurah,
+          );
+        }
+      }
     }
 
     return RepaintBoundary(
       child: InkWell(
         onTap: handleTap,
+        onDoubleTap: handleDoubleTap,
         onLongPress: () {
           final controlsState = ref.read(readerControlsProvider);
           if (controlsState.isControlsHidden) {
@@ -209,7 +259,7 @@ class AyahListItem extends ConsumerWidget {
                                             fontFamily: AppTypography.fontFamily,
                                             fontSize: 13,
                                             fontWeight: FontWeight.bold,
-                                            color: colorScheme.primary,
+                                            color: activeTheme.headerTextColor,
                                           ),
                                           textDirection: TextDirection.rtl,
                                         )
@@ -228,7 +278,7 @@ class AyahListItem extends ConsumerWidget {
                                             fontFamily: AppTypography.fontFamily,
                                             fontSize: 13,
                                             fontWeight: FontWeight.bold,
-                                            color: colorScheme.primary,
+                                            color: activeTheme.headerTextColor,
                                           ),
                                           textDirection: TextDirection.rtl,
                                         )
@@ -247,7 +297,7 @@ class AyahListItem extends ConsumerWidget {
                                             fontFamily: AppTypography.fontFamily,
                                             fontSize: 13,
                                             fontWeight: FontWeight.bold,
-                                            color: colorScheme.primary,
+                                            color: activeTheme.headerTextColor,
                                           ),
                                           textDirection: TextDirection.rtl,
                                         )
@@ -260,7 +310,7 @@ class AyahListItem extends ConsumerWidget {
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12.0),
                           child: QuranOrnamentalDivider(
-                            color: colorScheme.primary.withValues(alpha: 0.35),
+                            color: activeTheme.dividerColor,
                             height: 16,
                           ),
                         ),

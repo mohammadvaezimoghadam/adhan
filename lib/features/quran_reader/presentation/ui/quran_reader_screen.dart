@@ -26,6 +26,7 @@ import '../widgets/quran_info_bar.dart';
 import '../widgets/quick_settings_drawer.dart';
 import '../widgets/surah_ayah_page_view.dart';
 import '../widgets/word_by_word_bottom_sheet.dart';
+import '../../domain/entities/ayah_theme_entity.dart';
 import '../../../bookmarks/application/controllers/bookmarks_controller.dart';
 import '../../../../common/extensions/int_extension.dart';
 import '../../../../common/extensions/surah_name_extension.dart';
@@ -389,7 +390,11 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
     final double infoBarHeight = 40.0;
     final double headerHeight = appBarHeight + infoBarHeight;
 
-    final scaffoldBgColor = Theme.of(context).scaffoldBackgroundColor;
+    final ayahThemeId = ref.watch(
+      quranDisplaySettingsControllerProvider.select((s) => s.ayahThemeId),
+    );
+    final activeTheme = AyahThemePresets.getById(ayahThemeId);
+    final scaffoldBgColor = activeTheme.evenColor;
 
     return PopScope(
       canPop: !isSelectionMode,

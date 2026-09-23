@@ -18,9 +18,11 @@ import '../../../translation_manager/presentation/widgets/translation_settings_s
 import '../../application/controllers/quran_audio_controller.dart';
 import '../../application/controllers/quran_display_settings_controller.dart';
 import '../../domain/enums/audio_playback_mode.dart';
+import '../../domain/entities/ayah_theme_entity.dart';
 import '../../../subscription/application/vip_subscription_controller.dart';
 import '../../../subscription/presentation/widgets/vip_required_dialog.dart';
 import 'ayah_number_marker.dart';
+import 'ayah_theme_carousel.dart';
 import 'tashkeel_color_selector_tile.dart';
 
 /// Ultra-modern iOS-style Tabbed Settings Bottom Sheet (Display & Audio).
@@ -268,6 +270,32 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ── GROUP 0: AYAH COLOR THEMES (Telegram Style) ──
+                _buildSectionTitle('پوسته و رنگ آیات', textSecondary),
+                8.0.vSpace,
+                AyahThemeCarousel(
+                  selectedThemeId: settings.ayahThemeId,
+                  onThemeSelected: (themeId) =>
+                      displayNotifier.updateAyahTheme(themeId),
+                ),
+                10.0.vSpace,
+                _buildCardGroup(
+                  cardBgColor: cardBgColor,
+                  children: [
+                    SettingsSwitchTile(
+                      title: 'پس‌زمینه یکدست آیات',
+                      subtitle: 'یکنواخت‌سازی رنگ تمام آیات و حذف خطوط راه‌راه',
+                      value: settings.isAyahThemeSolid,
+                      accentColor: accentColor,
+                      textPrimary: textPrimary,
+                      textSecondary: textSecondary,
+                      onChanged: (val) =>
+                          displayNotifier.toggleAyahThemeSolid(val),
+                    ),
+                  ],
+                ),
+                16.0.vSpace,
+
                 // GROUP 1: QURAN SCRIPT & CALLIGRAPHY
                 _buildSectionTitle('قلم و نگارش قرآن', textSecondary),
                 6.0.vSpace,
@@ -520,15 +548,24 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
         ArabicTextHelper.parseHexColor(settings.harakatColor);
     const sampleArabicText = 'ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَالَمِينَ';
 
+    final activeTheme = AyahThemePresets.getById(settings.ayahThemeId);
+    final isThemeDark = activeTheme.isDark;
+    final effectiveTextColor =
+        isThemeDark ? Colors.white.withValues(alpha: 0.95) : const Color(0xFF1C1B1B);
+    final previewBgColor = settings.isAyahThemeSolid
+        ? activeTheme.evenColor
+        : activeTheme.oddColor;
+    final previewBorderColor = activeTheme.borderColor;
+
     final baseArabicStyle = AppTypography.displayQuranReader.copyWith(
       fontFamily: fontFamily,
       fontSize: settings.arabicFontSize,
       height: settings.arabicLineHeight,
-      color: textPrimary,
+      color: effectiveTextColor,
     );
 
     final bool useCustomHarakat =
-        harakatColor != null && harakatColor != textPrimary;
+        harakatColor != null && harakatColor != effectiveTextColor;
 
     final List<InlineSpan> textChildren = [];
 
@@ -538,7 +575,7 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
           ArabicTextHelper.buildColoredSpans(
             text: sampleArabicText,
             baseStyle: baseArabicStyle,
-            baseColor: textPrimary,
+            baseColor: effectiveTextColor,
             harakatColor: harakatColor,
           ),
         );
@@ -560,15 +597,17 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
       }
     }
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 8.0),
       decoration: BoxDecoration(
-        color: cardBgColor,
+        color: previewBgColor,
         borderRadius: BorderRadius.circular(14.0),
         border: Border.all(
-          color: accentColor.withValues(alpha: 0.2),
-          width: 1.0,
+          color: previewBorderColor,
+          width: 1.2,
         ),
       ),
       child: settings.showArabicText
@@ -586,7 +625,9 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
                 style: TextStyle(
                   fontFamily: AppTypography.fontFamily,
                   fontSize: 12,
-                  color: textSecondary,
+                  color: isThemeDark
+                      ? Colors.white.withValues(alpha: 0.6)
+                      : const Color(0xFF64748B),
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -610,15 +651,29 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
         ? rawSampleTranslationText.removeTranslatorExplanations()
         : rawSampleTranslationText;
 
-    return Container(
+    final activeTheme = AyahThemePresets.getById(settings.ayahThemeId);
+    final isThemeDark = activeTheme.isDark;
+
+    final previewBgColor = settings.isAyahThemeSolid
+        ? activeTheme.evenColor
+        : activeTheme.oddColor;
+    final previewBorderColor = activeTheme.borderColor;
+
+    final translationTextColor = isThemeDark
+        ? Colors.white.withValues(alpha: 0.88)
+        : const Color(0xFF334155);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 10.0),
       decoration: BoxDecoration(
-        color: cardBgColor,
+        color: previewBgColor,
         borderRadius: BorderRadius.circular(14.0),
         border: Border.all(
-          color: accentColor.withValues(alpha: 0.2),
-          width: 1.0,
+          color: previewBorderColor,
+          width: 1.2,
         ),
       ),
       child: settings.showTranslation
@@ -629,8 +684,8 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
               style: TextStyle(
                 fontFamily: settings.translationFontFamily,
                 fontSize: settings.translationFontSize,
-                color: textSecondary,
-                height: 1.35,
+                color: translationTextColor,
+                height: 1.45,
               ),
             )
           : Center(
@@ -639,7 +694,9 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
                 style: TextStyle(
                   fontFamily: AppTypography.fontFamily,
                   fontSize: 12,
-                  color: textSecondary,
+                  color: isThemeDark
+                      ? Colors.white.withValues(alpha: 0.6)
+                      : const Color(0xFF64748B),
                   fontStyle: FontStyle.italic,
                 ),
               ),

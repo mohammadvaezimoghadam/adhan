@@ -19,5 +19,7 @@ abstract class QuranDisplaySettingsState with _$QuranDisplaySettingsState {
     @Default('light') String themeMode, // 'light', 'sepia', 'dark'
     @Default('#FF4444') String harakatColor,
     @Default(true) bool removeTranslationBrackets,
+    @Default('classic_ivory') String ayahThemeId,
+    @Default(false) bool isAyahThemeSolid,
   }) = _QuranDisplaySettingsState;
 }
