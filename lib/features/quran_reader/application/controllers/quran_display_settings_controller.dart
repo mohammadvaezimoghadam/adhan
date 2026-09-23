@@ -33,6 +33,10 @@ class QuranDisplaySettingsController
         prefs.getString(PreferencesKeys.harakatColor) ?? '#FF4444';
     final removeTranslationBrackets =
         prefs.getBool(PreferencesKeys.removeTranslationBrackets) ?? true;
+    final ayahThemeId =
+        prefs.getString(PreferencesKeys.ayahThemeId) ?? 'classic_ivory';
+    final ayahThemeSolid =
+        prefs.getBool(PreferencesKeys.ayahThemeSolid) ?? false;
 
     return QuranDisplaySettingsState(
       arabicFontSize: arabicFontSize,
@@ -46,6 +50,8 @@ class QuranDisplaySettingsController
       translatorName: translatorName,
       harakatColor: harakatColor,
       removeTranslationBrackets: removeTranslationBrackets,
+      ayahThemeId: ayahThemeId,
+      isAyahThemeSolid: ayahThemeSolid,
     );
   }
 
@@ -84,8 +90,18 @@ class QuranDisplaySettingsController
       PreferencesKeys.removeTranslationBrackets,
       state.removeTranslationBrackets,
     );
+    prefs.setString(PreferencesKeys.ayahThemeId, state.ayahThemeId);
+    prefs.setBool(PreferencesKeys.ayahThemeSolid, state.isAyahThemeSolid);
 
     _initialStateOnOpen = state;
+  }
+
+  void updateAyahTheme(String themeId) {
+    state = state.copyWith(ayahThemeId: themeId);
+  }
+
+  void toggleAyahThemeSolid(bool isSolid) {
+    state = state.copyWith(isAyahThemeSolid: isSolid);
   }
 
   void updateArabicFontSize(double size) {
@@ -155,6 +171,8 @@ class QuranDisplaySettingsController
     prefs.remove(PreferencesKeys.translatorName);
     prefs.remove(PreferencesKeys.harakatColor);
     prefs.remove(PreferencesKeys.removeTranslationBrackets);
+    prefs.remove(PreferencesKeys.ayahThemeId);
+    prefs.remove(PreferencesKeys.ayahThemeSolid);
     _initialStateOnOpen = state;
   }
 }

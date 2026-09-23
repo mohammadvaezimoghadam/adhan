@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../common/utils/arabic_text_helper.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../application/controllers/quran_display_settings_controller.dart';
+import '../../domain/entities/ayah_theme_entity.dart';
 import 'ayah_number_marker.dart';
 
 /// Renders the Arabic text of an Ayah with an inline number marker
@@ -47,16 +48,28 @@ class AyahArabicText extends ConsumerWidget {
     final fontFamily = AppTypography.getFontFamilyByScript(fontScript);
     final harakatColor = ArabicTextHelper.parseHexColor(harakatColorHex);
 
+    final ayahThemeId = ref.watch(
+      quranDisplaySettingsControllerProvider.select((s) => s.ayahThemeId),
+    );
+    final activeTheme = AyahThemePresets.getById(ayahThemeId);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final textColor = activeTheme.isDark
+        ? Colors.white.withValues(alpha: 0.95)
+        : (isDark && !activeTheme.isDark
+            ? const Color(0xFF1C1B1B)
+            : colorScheme.onSurface);
+
     final baseStyle = AppTypography.displayQuranReader.copyWith(
       fontFamily: fontFamily,
       fontSize: arabicFontSize,
       height: arabicLineHeight,
-      color: colorScheme.onSurface,
+      color: textColor,
     );
 
     final sanitizedText = ArabicTextHelper.removeAnnotationMarks(text);
     final bool useCustomColor = harakatColor != null &&
-        harakatColor != colorScheme.onSurface;
+        harakatColor != textColor;
 
     String? bismillahText;
     String mainText = sanitizedText;
@@ -76,7 +89,7 @@ class AyahArabicText extends ConsumerWidget {
         return ArabicTextHelper.buildColoredSpans(
           text: rawText,
           baseStyle: baseStyle,
-          baseColor: colorScheme.onSurface,
+          baseColor: textColor,
           harakatColor: harakatColor,
         );
       } else {
