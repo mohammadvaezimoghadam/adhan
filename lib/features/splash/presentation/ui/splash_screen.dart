@@ -114,43 +114,34 @@ class _SplashScreenState extends State<SplashScreen>
                       scale: _scaleAnimation,
                       child: SlideTransition(
                         position: _slideAnimation,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(32),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 44,
-                                vertical: 22,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(32),
-                                gradient: RadialGradient(
-                                  radius: 1.15,
-                                  colors: [
-                                    Colors.white.withValues(alpha: 0.95), // White in center
-                                    Colors.white.withValues(alpha: 0.85),
-                                    Colors.white.withValues(alpha: 0.45),
-                                    Colors.white.withValues(alpha: 0.08), // Fades to transparent at edges
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Soft feathered white glow that dissolves seamlessly into transparency
+                            ImageFiltered(
+                              imageFilter: ImageFilter.blur(sigmaX: 32, sigmaY: 22),
+                              child: Container(
+                                width: 280,
+                                height: 76,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(38),
+                                  color: Colors.white.withValues(alpha: 0.94),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.white.withValues(alpha: 0.95),
+                                      blurRadius: 36,
+                                      spreadRadius: 16,
+                                    ),
                                   ],
-                                  stops: const [0.0, 0.45, 0.80, 1.0],
                                 ),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.55),
-                                  width: 1.2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.white.withValues(alpha: 0.7),
-                                    blurRadius: 32,
-                                    spreadRadius: 6,
-                                  ),
-                                  BoxShadow(
-                                    color: const Color(0xFF0A3C30).withValues(alpha: 0.06),
-                                    blurRadius: 24,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
+                              ),
+                            ),
+
+                            // Main Title
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
                               ),
                               child: AnimatedBuilder(
                                 animation: _shimmerController,
@@ -192,7 +183,7 @@ class _SplashScreenState extends State<SplashScreen>
                                 },
                               ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
