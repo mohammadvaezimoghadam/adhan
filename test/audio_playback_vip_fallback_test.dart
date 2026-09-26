@@ -74,6 +74,10 @@ class FakeQuranAudioHandler extends Fake implements QuranAudioHandler {
   Future<void> Function()? onSkipNext;
   @override
   Future<void> Function()? onSkipPrevious;
+  @override
+  Future<void> Function()? onPlay;
+  @override
+  Future<void> Function()? onPause;
 }
 
 class FakeAudioPlayerService extends Fake implements IAudioPlayerService {
@@ -91,6 +95,14 @@ class FakeAudioPlayerService extends Fake implements IAudioPlayerService {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    VipSubscriptionState.isAllFeaturesFree = false;
+  });
+
+  tearDown(() {
+    VipSubscriptionState.isAllFeaturesFree = true;
+  });
 
   test('When VIP subscription expires, audio mode reverts to onlyQuran and reciter reverts to Parhizgar', () async {
     SharedPreferences.setMockInitialValues({

@@ -45,11 +45,7 @@ class MainWidget extends ConsumerWidget {
         if (kIsWeb) {
           content = Container(
             color: isDark ? const Color(0xFF101716) : const Color(0xFFF0EAE1),
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 768),
-              child: content,
-            ),
+            child: content,
           );
         }
 

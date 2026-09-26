@@ -134,9 +134,14 @@ class AudioPlayerBottomBar extends ConsumerWidget {
         return;
       }
 
+      final audioState = ref.read(quranAudioControllerProvider);
+      final isAtEnd = audioState.duration > Duration.zero &&
+          audioState.position >= audioState.duration;
+      final isCompleted = audioStatus == AudioStatus.completed || isAtEnd;
+
       if (isPlaying) {
         audioController.pause();
-      } else if (audioStatus == AudioStatus.paused) {
+      } else if (audioStatus == AudioStatus.paused && !isAtEnd) {
         audioController.resume();
       } else {
         // Mode-aware download check: verifies ALL required sources
@@ -163,15 +168,25 @@ class AudioPlayerBottomBar extends ConsumerWidget {
           }
         }
 
-        // Prioritize the Ayah currently visible on screen; fallback to last attempted or first ayah
-        final startAyah = visibleAyahNumber ??
-            ref.read(quranAudioControllerProvider).lastAttemptedAyahNumber ??
-            (ayahs.isNotEmpty ? ayahs.first.ayahNumber : 1);
+        final currentAyah = audioState.currentAyahNumber;
+        final totalAyahs = ayahs.isNotEmpty ? ayahs.length : (audioState.totalAyahsInSurah ?? 1);
+
+        int startAyah;
+        if (isCompleted && currentAyah != null) {
+          // Track completed or reached end: advance to next ayah
+          startAyah = currentAyah < totalAyahs ? currentAyah + 1 : 1;
+        } else {
+          // Fresh start or stopped: prioritize visible ayah on screen
+          startAyah = visibleAyahNumber ??
+              currentAyah ??
+              audioState.lastAttemptedAyahNumber ??
+              (ayahs.isNotEmpty ? ayahs.first.ayahNumber : 1);
+        }
         
         audioController.playAyah(
           surahId: surahId,
           ayahNumber: startAyah,
-          totalAyahsInSurah: ayahs.isNotEmpty ? ayahs.length : 1,
+          totalAyahsInSurah: totalAyahs,
         );
       }
     }
@@ -179,7 +194,7 @@ class AudioPlayerBottomBar extends ConsumerWidget {
     // Original prominent disc dimensions (Radius: 38dp, Diameter: 76dp + 8dp margin = 84dp total)
     const double discRadius = 38.0;
     const double discSize = discRadius * 2 + 8; // 84.0px
-    const double playerHeight = 90.0;
+    const double playerHeight = 94.0;
 
     return SafeArea(
       top: false,

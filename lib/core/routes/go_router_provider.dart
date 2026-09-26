@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,7 +17,7 @@ import '../../features/smart_device/presentation/ui/smart_device_settings_screen
 import '../../features/splash/presentation/ui/splash_screen.dart';
 import '../../features/subscription/presentation/ui/vip_subscription_screen.dart';
 import '../../features/surah_list/presentation/ui/surah_list_screen.dart';
-import 'package:flutter/widgets.dart';
+import '../../features/tafsir_manager/presentation/ui/tafsir_reader_screen.dart';
 import 'route_name.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -23,7 +25,7 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/splash',
+    initialLocation: kIsWeb ? '/main' : '/splash',
     routes: [
       GoRoute(
         path: '/',
@@ -128,6 +130,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           return SurahDictionaryScreen(
             surahId: surahId,
             surahName: surahName,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/tafsir-reader/:id',
+        name: tafsirReaderRoute,
+        builder: (context, state) {
+          final surahId = int.tryParse(state.pathParameters['id'] ?? '1') ?? 1;
+          final surahName = state.uri.queryParameters['name'] ?? 'سوره';
+          final tafsirId = state.uri.queryParameters['tafsirId'];
+          final initialAyah = int.tryParse(state.uri.queryParameters['ayah'] ?? '');
+          return TafsirReaderScreen(
+            surahId: surahId,
+            surahName: surahName,
+            tafsirId: tafsirId,
+            initialAyahNumber: initialAyah,
           );
         },
       ),

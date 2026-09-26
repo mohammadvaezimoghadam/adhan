@@ -299,6 +299,7 @@ class _IslamicKatibahAppBarState extends State<IslamicKatibahAppBar> {
                 child: Image.asset(
                   AppConstants.ayahCardBgAsset,
                   fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
                 ),
               ),
             ),

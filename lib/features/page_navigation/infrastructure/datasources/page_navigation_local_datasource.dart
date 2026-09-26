@@ -4,9 +4,14 @@ import '../../../../core/data/local/sqflite/i_sqflite_service.dart';
 import '../../../../core/data/local/sqflite/sqflite_service_provider.dart';
 import '../dtos/page_navigation_dto.dart';
 
+import 'package:dio/dio.dart';
+import '../../../../common/constants/app_constants.dart';
+import '../../../../core/data/remote/network_service.dart';
+
 final pageNavigationLocalDataSourceProvider = Provider<IPageNavigationLocalDataSource>((ref) {
   if (kIsWeb) {
-    return const PageNavigationWebDataSource();
+    final dio = ref.watch(networkServiceProvider);
+    return PageNavigationWebDataSource(dio);
   }
   final sqfliteService = ref.watch(sqfliteServiceProvider);
   return PageNavigationLocalDataSourceImpl(sqfliteService);
@@ -51,10 +56,41 @@ class PageNavigationLocalDataSourceImpl implements IPageNavigationLocalDataSourc
 }
 
 class PageNavigationWebDataSource implements IPageNavigationLocalDataSource {
-  const PageNavigationWebDataSource();
+  final Dio _dio;
+  final Map<int, PageNavigationDto> _cache = {};
+
+  PageNavigationWebDataSource(this._dio);
 
   @override
   Future<PageNavigationDto?> getSurahInfoByPage(int pageNumber) async {
+    if (_cache.containsKey(pageNumber)) {
+      return _cache[pageNumber];
+    }
+
+    try {
+      final url = '${AppConstants.alQuranCloudBaseUrl}/page/$pageNumber/quran-uthmani';
+      debugPrint('🌐 [PageNavigationWebDataSource] Fetching page $pageNumber from $url ...');
+      final response = await _dio.get(url);
+
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data['data'];
+        final ayahs = (data?['ayahs'] as List<dynamic>?) ?? [];
+        if (ayahs.isNotEmpty) {
+          final firstAyah = ayahs.first;
+          final surahObj = firstAyah['surah'] as Map<String, dynamic>? ?? {};
+          final dto = PageNavigationDto(
+            surahId: surahObj['number'] as int? ?? 1,
+            ayahNumber: firstAyah['numberInSurah'] as int? ?? 1,
+            surahName: surahObj['name'] as String? ?? 'الفاتحة',
+          );
+          _cache[pageNumber] = dto;
+          return dto;
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ [PageNavigationWebDataSource] Error loading page $pageNumber: $e');
+    }
+
     return PageNavigationDto(
       surahId: 1,
       ayahNumber: 1,

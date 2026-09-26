@@ -7,23 +7,188 @@ import '../../../../core/data/local/sqflite/sqflite_service_provider.dart';
 import '../../domain/entities/search_filter_type.dart';
 import '../../domain/entities/search_result_item.dart';
 
+import 'package:dio/dio.dart';
+import '../../../../common/constants/app_constants.dart';
+import '../../../../core/data/remote/network_service.dart';
+import '../../../surah_list/domain/repositories/i_surah_repository.dart';
+import '../../../surah_list/infrastructure/repositories/surah_repository.dart';
+
 final searchLocalDataSourceProvider = Provider<ISearchLocalDataSource>((ref) {
   if (kIsWeb) {
-    return const SearchWebDataSource();
+    final dio = ref.watch(networkServiceProvider);
+    final surahRepo = ref.watch(surahRepositoryProvider);
+    return SearchWebDataSource(dio, surahRepo);
   }
   final sqfliteService = ref.watch(sqfliteServiceProvider);
   return SearchLocalDataSource(sqfliteService);
 });
 
 class SearchWebDataSource implements ISearchLocalDataSource {
-  const SearchWebDataSource();
+  final Dio _dio;
+  final ISurahRepository _surahRepository;
+
+  SearchWebDataSource(this._dio, this._surahRepository);
 
   @override
   Future<List<SearchResultItem>> search({
     required String query,
     SearchFilterType filter = SearchFilterType.all,
   }) async {
-    return const [];
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) return [];
+
+    final normalizedQuery = cleanQuery.normalizeForSearch();
+    final queryLower = cleanQuery.toLowerCase();
+    final queryNumber = int.tryParse(cleanQuery);
+    final results = <SearchResultItem>[];
+
+    // 1. Search Surahs (instant via Surah Repository)
+    if (filter == SearchFilterType.all || filter == SearchFilterType.surahs) {
+      try {
+        final surahsResult = await _surahRepository.getSurahs();
+        final surahs = surahsResult.tryGetSuccess() ?? [];
+        for (final surah in surahs) {
+          final matchesName = surah.name.normalizeForSearch().contains(normalizedQuery);
+          final matchesPersian = surah.number.surahNameFa.normalizeForSearch().contains(normalizedQuery);
+          final matchesEnglish = surah.englishName.toLowerCase().contains(queryLower);
+          final matchesNumber = queryNumber != null && surah.number == queryNumber;
+
+          if (matchesName || matchesPersian || matchesEnglish || matchesNumber) {
+            results.add(SearchResultItem(
+              kind: SearchResultKind.surah,
+              surahNumber: surah.number,
+              surahName: surah.name,
+              englishName: surah.englishName,
+              numberOfAyahs: surah.numberOfAyahs,
+              revelationType: surah.revelationType,
+            ));
+          }
+        }
+      } catch (e) {
+        debugPrint('⚠️ [SearchWebDataSource] Surah search error: $e');
+      }
+    }
+
+    if (filter == SearchFilterType.surahs) {
+      return results;
+    }
+
+    // 2. Search Ayahs via AlQuran Cloud API
+    try {
+      final encoded = Uri.encodeComponent(cleanQuery);
+      final futures = <Future<Response>>[];
+      final searchArabic = filter == SearchFilterType.all || filter == SearchFilterType.ayahs;
+      final searchPersian = filter == SearchFilterType.all || filter == SearchFilterType.translations;
+
+      if (searchArabic) {
+        futures.add(_dio.get(
+          '${AppConstants.alQuranCloudBaseUrl}/search/$encoded/all/quran-uthmani',
+          options: Options(validateStatus: (s) => s == 200 || s == 404),
+        ));
+      }
+      if (searchPersian) {
+        futures.add(_dio.get(
+          '${AppConstants.alQuranCloudBaseUrl}/search/$encoded/all/fa.makarem',
+          options: Options(validateStatus: (s) => s == 200 || s == 404),
+        ));
+      }
+
+      final responses = await Future.wait(futures);
+      final arabicResp = searchArabic && responses.isNotEmpty ? responses[0] : null;
+      final persianResp = searchPersian ? (searchArabic ? (responses.length > 1 ? responses[1] : null) : responses[0]) : null;
+      final Set<int> seenGlobalAyahIds = {};
+
+      if (arabicResp != null && arabicResp.statusCode == 200 && arabicResp.data != null) {
+        final matches = (arabicResp.data['data']?['matches'] as List<dynamic>?) ?? [];
+        for (final m in matches) {
+          final globalNum = m['number'] as int? ?? 0;
+          final numInSurah = m['numberInSurah'] as int? ?? 1;
+          final surahObj = m['surah'] as Map<String, dynamic>? ?? {};
+          final surahNum = surahObj['number'] as int? ?? 1;
+          final surahName = surahObj['name'] as String? ?? 'سوره $surahNum';
+          final englishName = surahObj['englishName'] as String? ?? '';
+          final text = m['text'] as String? ?? '';
+          final page = m['page'] as int?;
+          final juz = m['juz'] as int?;
+
+          seenGlobalAyahIds.add(globalNum);
+          results.add(SearchResultItem(
+            kind: SearchResultKind.ayah,
+            surahNumber: surahNum,
+            surahName: surahName,
+            englishName: englishName,
+            numberOfAyahs: surahObj['numberOfAyahs'] as int?,
+            revelationType: surahObj['revelationType'] as String?,
+            ayahNumber: numInSurah,
+            arabicText: text,
+            translationText: '',
+            pageNumber: page,
+            juzNumber: juz,
+            matchedInArabic: true,
+            matchedInTranslation: false,
+          ));
+        }
+      }
+
+      if (persianResp != null && persianResp.statusCode == 200 && persianResp.data != null) {
+        final matches = (persianResp.data['data']?['matches'] as List<dynamic>?) ?? [];
+        for (final m in matches) {
+          final globalNum = m['number'] as int? ?? 0;
+          final numInSurah = m['numberInSurah'] as int? ?? 1;
+          final surahObj = m['surah'] as Map<String, dynamic>? ?? {};
+          final surahNum = surahObj['number'] as int? ?? 1;
+          final surahName = surahObj['name'] as String? ?? 'سوره $surahNum';
+          final englishName = surahObj['englishName'] as String? ?? '';
+          final transText = m['text'] as String? ?? '';
+          final page = m['page'] as int?;
+          final juz = m['juz'] as int?;
+
+          if (seenGlobalAyahIds.contains(globalNum)) {
+            final idx = results.indexWhere(
+              (r) => r.isAyah && r.surahNumber == surahNum && r.ayahNumber == numInSurah,
+            );
+            if (idx != -1) {
+              final old = results[idx];
+              results[idx] = SearchResultItem(
+                kind: SearchResultKind.ayah,
+                surahNumber: old.surahNumber,
+                surahName: old.surahName,
+                englishName: old.englishName,
+                numberOfAyahs: old.numberOfAyahs,
+                revelationType: old.revelationType,
+                ayahNumber: old.ayahNumber,
+                arabicText: old.arabicText,
+                translationText: transText,
+                pageNumber: old.pageNumber,
+                juzNumber: old.juzNumber,
+                matchedInArabic: old.matchedInArabic,
+                matchedInTranslation: true,
+              );
+            }
+          } else {
+            results.add(SearchResultItem(
+              kind: SearchResultKind.ayah,
+              surahNumber: surahNum,
+              surahName: surahName,
+              englishName: englishName,
+              numberOfAyahs: surahObj['numberOfAyahs'] as int?,
+              revelationType: surahObj['revelationType'] as String?,
+              ayahNumber: numInSurah,
+              arabicText: '',
+              translationText: transText,
+              pageNumber: page,
+              juzNumber: juz,
+              matchedInArabic: false,
+              matchedInTranslation: true,
+            ));
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ [SearchWebDataSource] Remote search error: $e');
+    }
+
+    return results;
   }
 }
 

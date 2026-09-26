@@ -2,6 +2,10 @@ import '../../../../core/services/payment/models/payment_product.dart';
 
 /// State representation of the user's VIP membership and active products.
 class VipSubscriptionState {
+  /// Global toggle: When true, all features across the app (reciters, translations, playback modes)
+  /// are 100% free for all users without requiring a paid subscription.
+  static bool isAllFeaturesFree = true;
+
   final bool isVip;
   final DateTime? vipExpiryDate;
   final String? activePlanId;
@@ -20,6 +24,7 @@ class VipSubscriptionState {
 
   /// True if the user currently holds an active paid VIP subscription or lifetime access.
   bool get hasVipAccess {
+    if (isAllFeaturesFree) return true;
     if (!isVip) return false;
     if (vipExpiryDate == null) return true; // Lifetime VIP
     return DateTime.now().isBefore(vipExpiryDate!);

@@ -316,9 +316,10 @@ class _DownloadedItemsSectionState extends ConsumerState<DownloadedItemsSection>
             );
             if (!isAllowed || !mounted) return;
 
+            await ref.read(quranAudioControllerProvider.notifier).stop();
             await ref
                 .read(quranAudioControllerProvider.notifier)
-                .selectReciter(reciter);
+                .selectReciter(reciter, autoRestart: false);
           }
         }
         // Set playback mode to only Quran recitation and persist
@@ -330,6 +331,10 @@ class _DownloadedItemsSectionState extends ConsumerState<DownloadedItemsSection>
           context.pushNamed(
             quranReaderRoute,
             pathParameters: {'id': item.surahId.toString()},
+            queryParameters: {
+              'ayah': '1',
+              'name': item.title,
+            },
           );
         }
         break;
@@ -348,9 +353,10 @@ class _DownloadedItemsSectionState extends ConsumerState<DownloadedItemsSection>
               ?.where((r) => r.id == item.reciterId)
               .firstOrNull;
           if (reciter != null) {
+            await ref.read(quranAudioControllerProvider.notifier).stop();
             await ref
                 .read(quranAudioControllerProvider.notifier)
-                .selectTranslationReciter(reciter);
+                .selectTranslationReciter(reciter, autoRestart: false);
           }
         }
         // Set playback mode to only Translation and persist
@@ -362,6 +368,10 @@ class _DownloadedItemsSectionState extends ConsumerState<DownloadedItemsSection>
           context.pushNamed(
             quranReaderRoute,
             pathParameters: {'id': item.surahId.toString()},
+            queryParameters: {
+              'ayah': '1',
+              'name': item.title,
+            },
           );
         }
         break;
@@ -513,7 +523,7 @@ class _DownloadedItemRow extends StatelessWidget {
         break;
       case DownloadedItemType.textTranslation:
         badgeLabel = 'متن ترجمه';
-        iconData = CupertinoIcons.book;
+        iconData = CupertinoIcons.doc_text;
         break;
     }
 
@@ -529,125 +539,99 @@ class _DownloadedItemRow extends StatelessWidget {
         : Colors.black.withValues(alpha: 0.05);
     final fallbackIconColor = isDark ? Colors.white60 : Colors.black54;
 
-    return Row(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: (item.imageUrl != null && item.imageUrl!.isNotEmpty)
-                ? AppCachedNetworkImage(
-                    imageUrl: item.imageUrl,
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
-                    fallbackIcon: iconData,
-                    backgroundColor: fallbackBg,
-                  )
-                : Container(
-                    color: fallbackBg,
-                    alignment: Alignment.center,
-                    child: Icon(
-                      iconData,
-                      size: 18,
-                      color: fallbackIconColor,
-                    ),
-                  ),
-          ),
-        ),
-        const SizedBox(width: 10),
-
-        // Title and Subtitle
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onOpen();
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2.0),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      item.title,
-                      style: const TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '• $badgeLabel',
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: badgeColor,
-                    ),
-                  ),
-                ],
-              ),
-              if (cleanSubtitle.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(
-                  cleanSubtitle,
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 11,
-                    color: isDark ? Colors.white60 : Colors.black54,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: (item.imageUrl != null && item.imageUrl!.isNotEmpty)
+                      ? AppCachedNetworkImage(
+                          imageUrl: item.imageUrl,
+                          width: 36,
+                          height: 36,
+                          fit: BoxFit.cover,
+                          fallbackIcon: iconData,
+                          backgroundColor: fallbackBg,
+                        )
+                      : Container(
+                          color: fallbackBg,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            iconData,
+                            size: 18,
+                            color: fallbackIconColor,
+                          ),
+                        ),
                 ),
-              ],
+              ),
+              const SizedBox(width: 10),
+
+              // Title and Subtitle
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            item.title,
+                            style: const TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '• $badgeLabel',
+                          style: TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: badgeColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (cleanSubtitle.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        cleanSubtitle,
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 11,
+                          color: isDark ? Colors.white60 : Colors.black54,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // Removed Action buttons (Play + Delete) as requested by the user.
+              // Tapping the row itself already triggers onOpen().
             ],
           ),
         ),
-
-        // Action: Play icon + Plain text Delete (no colored box)
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              tooltip: 'پخش',
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              icon: Icon(
-                CupertinoIcons.play_circle,
-                size: 22,
-                color: context.colorScheme.onSurfaceVariant,
-              ),
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                onOpen();
-              },
-            ),
-            const SizedBox(width: 4),
-            InkWell(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                onDelete();
-              },
-              borderRadius: BorderRadius.circular(4),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Text(
-                  'حذف',
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                    color: context.colorScheme.error,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 }

@@ -13,8 +13,13 @@ class AppSnackBar {
     const backgroundColor = Color(0xFF2C2C2E);
     const borderColor = Color(0xFF3E3E42);
 
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null || !messenger.mounted) return;
+
+    try {
+      messenger.hideCurrentSnackBar();
+    } catch (_) {}
+
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -40,11 +45,6 @@ class AppSnackBar {
         duration: duration,
       ),
     );
-
-    // Guaranteed forced dismissal after duration
-    Future.delayed(duration + const Duration(milliseconds: 200), () {
-      messenger.hideCurrentSnackBar();
-    });
   }
 
   static void showSuccess(BuildContext context, String message) {

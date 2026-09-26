@@ -3,13 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:go_router/go_router.dart';
-
 import '../../../../../common/extensions/context_extension.dart';
 import '../../../../../common/extensions/size_extension.dart';
-import '../../../../../core/routes/route_name.dart';
 import '../../../../../core/theme/app_typography.dart';
 import '../../../../main_navigation/application/tab_navigation_controller.dart';
+import '../../../../tafsir_manager/presentation/widgets/tafsir_manager_bottom_sheet.dart';
 import '../../../../translation_manager/presentation/widgets/translation_manager_bottom_sheet.dart';
 
 /// Modern Asymmetric Action Hub:
@@ -115,7 +113,7 @@ class HomeQuickAccessGrid extends ConsumerWidget {
             title: 'ترجمه‌ها',
             iconWidget: Icon(
               CupertinoIcons.text_bubble,
-              size: 26,
+              size: 27,
               color: primaryMint,
             ),
             isDark: isDark,
@@ -129,23 +127,28 @@ class HomeQuickAccessGrid extends ConsumerWidget {
         ),
         8.hSpace,
 
-        // 3. Secondary Companion Card: "تنظیمات"
+        // 3. Secondary Companion Card: "تفسیر"
         Expanded(
           flex: 2,
           child: _buildSecondaryCard(
             context: context,
-            title: 'تنظیمات',
-            iconWidget: Icon(
-              CupertinoIcons.gear_alt,
-              size: 26,
-              color: primaryMint,
+            title: 'تفسیر',
+            iconWidget: SvgPicture.asset(
+              'assets/icons/ic_tafsir.svg',
+              width: 38,
+              height: 38,
+              fit: BoxFit.contain,
+              colorFilter: ColorFilter.mode(
+                primaryMint,
+                BlendMode.srcIn,
+              ),
             ),
             isDark: isDark,
             bgColor: cardBg,
             borderColor: cardBorderColor,
             onTap: () {
               HapticFeedback.lightImpact();
-              context.pushNamed(settingsRoute);
+              TafsirManagerBottomSheet.show(context);
             },
           ),
         ),
@@ -188,19 +191,19 @@ class HomeQuickAccessGrid extends ConsumerWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(16.0),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 6.0),
+            padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 5.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(
-                  width: 32,
-                  height: 32,
+                  width: 38,
+                  height: 38,
                   child: Center(
                     child: iconWidget,
                   ),
                 ),
-                4.vSpace,
+                2.vSpace,
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(

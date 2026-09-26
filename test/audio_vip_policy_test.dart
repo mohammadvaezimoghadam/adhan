@@ -1,7 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quran/features/subscription/domain/models/vip_subscription_state.dart';
 import 'package:quran/features/subscription/domain/policy/audio_vip_policy.dart';
 
 void main() {
+  setUp(() {
+    VipSubscriptionState.isAllFeaturesFree = false;
+  });
+
+  tearDown(() {
+    VipSubscriptionState.isAllFeaturesFree = true;
+  });
+
   group('AudioVipPolicy Tests', () {
     test('Parhizgar (Default reciter) should be 100% free for all 114 surahs', () {
       const parhizgarIdentifier = 'parhizgar_48kbps';

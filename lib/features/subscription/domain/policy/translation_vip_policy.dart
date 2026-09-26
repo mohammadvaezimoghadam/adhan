@@ -1,3 +1,5 @@
+import '../models/vip_subscription_state.dart';
+
 /// Defines VIP access policy for Quran text translations.
 class TranslationVipPolicy {
   /// The default free translation bundled in the local database.
@@ -14,7 +16,7 @@ class TranslationVipPolicy {
     required String translationId,
     required bool hasVip,
   }) {
-    if (hasVip) return true;
+    if (VipSubscriptionState.isAllFeaturesFree || hasVip) return true;
     return isTranslationFree(translationId);
   }
 }

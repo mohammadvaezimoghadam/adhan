@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -642,7 +643,8 @@ class _QuranQuickJumpBottomSheetState
       return;
     }
 
-    // Database lookup
+    // Database lookup (skip on Web where all Quran navigation uses online/cached mapping)
+    if (kIsWeb) return;
     try {
       final sqflite = ref.read(sqfliteServiceProvider);
       final res = await sqflite.rawQuery(

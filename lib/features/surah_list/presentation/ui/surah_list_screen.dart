@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../common/constants/app_constants.dart';
+import '../../../../common/extensions/context_extension.dart';
 import '../../../../common/extensions/surah_name_extension.dart';
+import '../../../../common/responsive/responsive_layout.dart';
 import '../../../../common/widgets/app_snackbar.dart';
+import 'web_surah_catalog_view.dart';
 import '../../../../core/routes/route_name.dart';
 import '../../../../core/services/audio_storage/audio_storage_providers.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -90,43 +93,45 @@ class _SurahListScreenState extends ConsumerState<SurahListScreen> {
       },
       child: Scaffold(
         extendBody: true,
-        appBar: SurahListAppleHeader(
-          showBackButton: widget.showBackButton,
-          title: isOnlyFavorites ? 'فهرست شخصی' : AppConstants.surahListScreenTitle,
-          searchController: _searchController,
-          searchFocusNode: _searchFocusNode,
-          onSearchChanged: (query) {
-            ref.read(surahListControllerProvider.notifier).searchSurahs(query);
-          },
-          onBackPressed: () {
-            if (isOnlyFavorites) {
-              ref.read(surahListControllerProvider.notifier).setOnlyFavorites(false);
-            }
-            _dismissSearchAndNavigate(() {
-              if (widget.onBackPressed != null) {
-                widget.onBackPressed!();
-              } else if (context.canPop()) {
-                context.pop();
-              } else {
-                ref
-                    .read(tabNavigationControllerProvider.notifier)
-                    .handleBackPress();
-              }
-            });
-          },
-          onAudioDownloadManagerTap: () {
-            _dismissSearchAndNavigate(() {
-              context.pushNamed(audioDownloadManagerRoute);
-            });
-          },
-          onSortTap: () {
-            SurahSortBottomSheet.show(context);
-          },
-          onToggleFavoritesTap: () {
-            ref.read(surahListControllerProvider.notifier).toggleOnlyFavorites();
-          },
-          isOnlyFavorites: isOnlyFavorites,
-        ),
+        appBar: context.isWideScreen
+            ? null
+            : SurahListAppleHeader(
+                showBackButton: widget.showBackButton,
+                title: isOnlyFavorites ? 'فهرست شخصی' : AppConstants.surahListScreenTitle,
+                searchController: _searchController,
+                searchFocusNode: _searchFocusNode,
+                onSearchChanged: (query) {
+                  ref.read(surahListControllerProvider.notifier).searchSurahs(query);
+                },
+                onBackPressed: () {
+                  if (isOnlyFavorites) {
+                    ref.read(surahListControllerProvider.notifier).setOnlyFavorites(false);
+                  }
+                  _dismissSearchAndNavigate(() {
+                    if (widget.onBackPressed != null) {
+                      widget.onBackPressed!();
+                    } else if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      ref
+                          .read(tabNavigationControllerProvider.notifier)
+                          .handleBackPress();
+                    }
+                  });
+                },
+                onAudioDownloadManagerTap: () {
+                  _dismissSearchAndNavigate(() {
+                    context.pushNamed(audioDownloadManagerRoute);
+                  });
+                },
+                onSortTap: () {
+                  SurahSortBottomSheet.show(context);
+                },
+                onToggleFavoritesTap: () {
+                  ref.read(surahListControllerProvider.notifier).toggleOnlyFavorites();
+                },
+                isOnlyFavorites: isOnlyFavorites,
+              ),
         body: _SurahListBody(
           isOnlyFavorites: isOnlyFavorites,
           isSearching: isSearching,
@@ -135,7 +140,7 @@ class _SurahListScreenState extends ConsumerState<SurahListScreen> {
           onDownloadTap: _handleSurahDownloadTap,
           onBeforeNavigation: () => _dismissSearchAndNavigate(() {}),
         ),
-        bottomNavigationBar: (!isSearching || widget.showBottomMiniPlayer)
+        bottomNavigationBar: (!context.isWideScreen && (!isSearching || widget.showBottomMiniPlayer))
             ? SafeArea(
                 top: false,
                 bottom: false,
@@ -345,82 +350,106 @@ class _SurahListBody extends ConsumerWidget {
         }
         return false;
       },
-      child: Column(
-        children: [
-          // Isolated Quick Actions collapse/expand via ValueListenableBuilder:
-          // Scrolling does NOT rebuild the entire screen or ListView!
-          ValueListenableBuilder<bool>(
-            valueListenable: isQuickActionsVisible,
-            builder: (context, isVisible, child) {
-              final shouldShow = isVisible && showQuickActions;
-              return ClipRect(
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeInOutCubic,
-                  alignment: Alignment.topCenter,
-                  child: AnimatedOpacity(
-                    opacity: shouldShow ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeInOut,
-                    child: shouldShow
-                        ? SurahListQuickActions(
-                            onBeforeNavigation: onBeforeNavigation,
-                          )
-                        : const SizedBox(width: double.infinity, height: 0),
-                  ),
+      child: ResponsiveLayout(
+        mobile: _buildMobileLayout(
+          context,
+          filteredSurahs: filteredSurahs,
+          showQuickActions: showQuickActions,
+          isOnlyFavorites: isOnlyFavorites,
+        ),
+        desktop: WebSurahCatalogView(
+          onOpenReader: onOpenReader,
+          onDownloadTap: onDownloadTap,
+          onBeforeNavigation: onBeforeNavigation,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout(
+    BuildContext context, {
+    required List<SurahEntity> filteredSurahs,
+    required bool showQuickActions,
+    required bool isOnlyFavorites,
+  }) {
+    return Column(
+      children: [
+        // Isolated Quick Actions collapse/expand via ValueListenableBuilder
+        ValueListenableBuilder<bool>(
+          valueListenable: isQuickActionsVisible,
+          builder: (context, isVisible, child) {
+            final shouldShow = isVisible && showQuickActions;
+            return ClipRect(
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeInOutCubic,
+                alignment: Alignment.topCenter,
+                child: AnimatedOpacity(
+                  opacity: shouldShow ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  child: shouldShow
+                      ? SurahListQuickActions(
+                          onBeforeNavigation: onBeforeNavigation,
+                        )
+                      : const SizedBox(width: double.infinity, height: 0),
                 ),
-              );
-            },
-          ),
-          Expanded(
-            child: filteredSurahs.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Text(
-                        isOnlyFavorites
-                            ? 'فهرست شخصی شما خالی است.\nبا زدن آیکون ستاره در کنار هر سوره می‌توانید آن را به این فهرست اضافه کنید.'
-                            : AppConstants.noSurahFound,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontFamily: AppTypography.fontFamily,
-                          fontSize: 14,
-                          color: Colors.grey,
-                          height: 1.6,
-                        ),
-                      ),
-                    ),
-                  )
-                : ListView.separated(
-                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.only(
-                      left: 0,
-                      right: 0,
-                      top: showQuickActions ? 4 : 8,
-                      bottom: 84,
-                    ),
-                    itemCount: filteredSurahs.length,
-                    separatorBuilder: (context, index) => Divider(
-                      height: 1,
-                      thickness: 0.6,
-                      indent: 68,
-                      endIndent: 16,
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.black.withValues(alpha: 0.06),
-                    ),
-                    itemBuilder: (context, index) {
-                      final surah = filteredSurahs[index];
-                      return SurahListItem(
-                        key: ValueKey(surah.number),
-                        surah: surah,
-                        onTap: () => onOpenReader(surah),
-                        onDownloadTap: () => onDownloadTap(surah),
-                      );
-                    },
+              ),
+            );
+          },
+        ),
+        Expanded(
+          child: filteredSurahs.isEmpty
+              ? _buildEmptyState(isOnlyFavorites)
+              : ListView.separated(
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.only(
+                    left: 0,
+                    right: 0,
+                    top: showQuickActions ? 4 : 8,
+                    bottom: 84,
                   ),
+                  itemCount: filteredSurahs.length,
+                  separatorBuilder: (context, index) => Divider(
+                    height: 1,
+                    thickness: 0.6,
+                    indent: 68,
+                    endIndent: 16,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.06),
+                  ),
+                  itemBuilder: (context, index) {
+                    final surah = filteredSurahs[index];
+                    return SurahListItem(
+                      key: ValueKey(surah.number),
+                      surah: surah,
+                      onTap: () => onOpenReader(surah),
+                      onDownloadTap: () => onDownloadTap(surah),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(bool isOnlyFavorites) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Text(
+          isOnlyFavorites
+              ? 'فهرست شخصی شما خالی است.\nبا زدن آیکون ستاره در کنار هر سوره می‌توانید آن را به این فهرست اضافه کنید.'
+              : AppConstants.noSurahFound,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 14,
+            color: Colors.grey,
+            height: 1.6,
           ),
-        ],
+        ),
       ),
     );
   }

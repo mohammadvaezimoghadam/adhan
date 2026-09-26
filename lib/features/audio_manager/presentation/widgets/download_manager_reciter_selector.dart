@@ -61,9 +61,9 @@ class DownloadManagerReciterSelector extends ConsumerWidget {
                 onReciterSelected: (ReciterEntity reciter) {
                   ref.read(downloadManagerSelectedReciterProvider.notifier).setReciter(reciter);
                   if (isTranslationMode || reciter.styleId == 4) {
-                    ref.read(quranAudioControllerProvider.notifier).selectTranslationReciter(reciter);
+                    ref.read(quranAudioControllerProvider.notifier).selectTranslationReciter(reciter, autoRestart: false);
                   } else {
-                    ref.read(quranAudioControllerProvider.notifier).selectReciter(reciter);
+                    ref.read(quranAudioControllerProvider.notifier).selectReciter(reciter, autoRestart: false);
                   }
                 },
               );

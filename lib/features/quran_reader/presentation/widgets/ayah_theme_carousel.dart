@@ -121,6 +121,7 @@ class AyahThemeCarousel extends StatelessWidget {
                         theme.previewAsset,
                         fit: BoxFit.cover,
                         colorBlendMode: BlendMode.dstIn,
+                        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
                       ),
                     ),
 

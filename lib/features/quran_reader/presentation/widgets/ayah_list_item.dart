@@ -1,9 +1,11 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../common/extensions/int_extension.dart';
+import '../../../../common/extensions/context_extension.dart';
 import '../../../../core/services/audio/audio_player_state.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -123,32 +125,6 @@ class AyahListItem extends ConsumerWidget {
         (isJuzStart && ayah.juz != null) ||
         (isHizbStart && ayah.hizb != null);
 
-    void handleTap() {
-      // UX INTERCEPT: If text is actively selected, tapping ANYWHERE on this item
-      // should ONLY clear the text selection, NOT deselect the entire Ayah.
-      if (SmartSelectionArea.hasGlobalSelection) {
-        FocusManager.instance.primaryFocus?.unfocus();
-        SmartSelectionArea.hasGlobalSelection = false; // Optimistic update
-        return;
-      }
-
-      final currentSelected = ref.read(selectedAyahActionProvider);
-      if (currentSelected.isNotEmpty) {
-        // Tap toggles selection when selection mode is active
-        ref
-            .read(selectedAyahActionProvider.notifier)
-            .toggleAyah(ayah.ayahNumber);
-        return;
-      }
-
-      final controlsState = ref.read(readerControlsProvider);
-      if (controlsState.isFullScreen) {
-        // Tap on ayah toggles between full-screen controls hidden and visible
-        ref.read(readerControlsProvider.notifier).toggleControls();
-        return;
-      }
-    }
-
     Future<void> handleDoubleTap() async {
       // UX INTERCEPT: If text is actively selected or selection mode is active, do nothing
       if (SmartSelectionArea.hasGlobalSelection) {
@@ -185,6 +161,38 @@ class AyahListItem extends ConsumerWidget {
             totalAyahsInSurah: totalAyahsInSurah,
           );
         }
+      }
+    }
+
+    void handleTap() {
+      // UX INTERCEPT: If text is actively selected, tapping ANYWHERE on this item
+      // should ONLY clear the text selection, NOT deselect the entire Ayah.
+      if (SmartSelectionArea.hasGlobalSelection) {
+        FocusManager.instance.primaryFocus?.unfocus();
+        SmartSelectionArea.hasGlobalSelection = false; // Optimistic update
+        return;
+      }
+
+      final currentSelected = ref.read(selectedAyahActionProvider);
+      if (currentSelected.isNotEmpty) {
+        // Tap toggles selection when selection mode is active
+        ref
+            .read(selectedAyahActionProvider.notifier)
+            .toggleAyah(ayah.ayahNumber);
+        return;
+      }
+
+      final controlsState = ref.read(readerControlsProvider);
+      if (controlsState.isFullScreen) {
+        // Tap on ayah toggles between full-screen controls hidden and visible
+        ref.read(readerControlsProvider.notifier).toggleControls();
+        return;
+      }
+
+      // On Web/Desktop, single-click directly plays/pauses this Ayah
+      if (kIsWeb) {
+        handleDoubleTap();
+        return;
       }
     }
 
@@ -317,33 +325,76 @@ class AyahListItem extends ConsumerWidget {
                       ],
                     ),
 
-                  // Main Arabic Ayah Text with Embedded Ayah Marker
-                  if (showArabicText)
-                    SmartSelectionArea(
-                      isSelectable: isSelectedForAction,
-                      onTap: handleTap,
-                      child: AyahArabicText(
-                        text: ayah.arabicText,
-                        ayahNumber: ayah.ayahNumber,
-                        isActive: isAudioActive,
-                        surahId: ayah.surahId,
-                      ),
+                  if (context.isWideScreen)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (showArabicText)
+                          Expanded(
+                            child: SmartSelectionArea(
+                              isSelectable: isSelectedForAction,
+                              onTap: handleTap,
+                              child: AyahArabicText(
+                                text: ayah.arabicText,
+                                ayahNumber: ayah.ayahNumber,
+                                isActive: isAudioActive,
+                                surahId: ayah.surahId,
+                              ),
+                            ),
+                          ),
+                        if (showArabicText && showTranslation)
+                          const SizedBox(width: 24),
+                        if (showTranslation)
+                          Expanded(
+                            child: SmartSelectionArea(
+                              isSelectable: isSelectedForAction,
+                              onTap: handleTap,
+                              child: AyahTranslationText(
+                                surahId: ayah.surahId,
+                                ayahNumber: ayah.ayahNumber,
+                                fallbackText: ayah.translationText ?? '',
+                                isActive: isAudioActive,
+                                isVisible: showTranslation,
+                                fontSize: translationFontSize,
+                                translationId: translationId,
+                              ),
+                            ),
+                          ),
+                      ],
+                    )
+                  else
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Main Arabic Ayah Text with Embedded Ayah Marker
+                        if (showArabicText)
+                          SmartSelectionArea(
+                            isSelectable: isSelectedForAction,
+                            onTap: handleTap,
+                            child: AyahArabicText(
+                              text: ayah.arabicText,
+                              ayahNumber: ayah.ayahNumber,
+                              isActive: isAudioActive,
+                              surahId: ayah.surahId,
+                            ),
+                          ),
+                        // Ayah Persian Translation
+                        if (showTranslation)
+                          SmartSelectionArea(
+                            isSelectable: isSelectedForAction,
+                            onTap: handleTap,
+                            child: AyahTranslationText(
+                              surahId: ayah.surahId,
+                              ayahNumber: ayah.ayahNumber,
+                              fallbackText: ayah.translationText ?? '',
+                              isActive: isAudioActive,
+                              isVisible: showTranslation,
+                              fontSize: translationFontSize,
+                              translationId: translationId,
+                            ),
+                          ),
+                      ],
                     ),
-
-                  // Ayah Persian Translation
-                  SmartSelectionArea(
-                    isSelectable: isSelectedForAction,
-                    onTap: handleTap,
-                    child: AyahTranslationText(
-                      surahId: ayah.surahId,
-                      ayahNumber: ayah.ayahNumber,
-                      fallbackText: ayah.translationText ?? '',
-                      isActive: isAudioActive,
-                      isVisible: showTranslation,
-                      fontSize: translationFontSize,
-                      translationId: translationId,
-                    ),
-                  ),
                 ],
               ),
             ),

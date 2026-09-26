@@ -1,3 +1,5 @@
+import '../models/vip_subscription_state.dart';
+
 /// Pure business policy governing access to Quran audio playback, reciters, and audio translations.
 class AudioVipPolicy {
   /// Surah IDs that are available 100% free for ALL reciters (Demo Surahs):
@@ -24,17 +26,15 @@ class AudioVipPolicy {
   }
 
   /// Determines whether playing a specific Surah for a specific Reciter is permitted.
-  ///
-  /// Rules:
-  /// 1. Ostad Parhizgar: ALL 114 Surahs are 100% FREE for all users.
-  /// 2. Any other reciter (Abdulbasit, Menshawi, Afasy, etc.):
-  ///    - Demo Surahs (1, 109, 112, 113, 114) are FREE for all users.
-  ///    - The other 109 Surahs REQUIRE an active VIP subscription.
   static bool canPlayReciter({
     required String? reciterIdentifier,
     required int surahId,
     required bool isVip,
   }) {
+    if (VipSubscriptionState.isAllFeaturesFree || isVip) {
+      return true;
+    }
+
     if (isDefaultReciter(reciterIdentifier)) {
       return true;
     }
@@ -47,8 +47,10 @@ class AudioVipPolicy {
   }
 
   /// Determines whether playing Persian audio translation (ترجمه گویای صوتی) is permitted.
-  /// Audio translation is an exclusive VIP feature for all Surahs.
   static bool canPlayAudioTranslation({required bool isVip}) {
+    if (VipSubscriptionState.isAllFeaturesFree || isVip) {
+      return true;
+    }
     return isVip;
   }
 }

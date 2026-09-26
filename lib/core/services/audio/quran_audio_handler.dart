@@ -9,6 +9,8 @@ class QuranAudioHandler extends BaseAudioHandler with SeekHandler {
 
   Future<void> Function()? onSkipNext;
   Future<void> Function()? onSkipPrevious;
+  Future<void> Function()? onPlay;
+  Future<void> Function()? onPause;
 
   /// When true, we're in an active playback session.
   /// The notification stays alive until explicitly stopped via [customStop].
@@ -85,10 +87,22 @@ class QuranAudioHandler extends BaseAudioHandler with SeekHandler {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    if (onPlay != null) {
+      await onPlay!();
+    } else {
+      await _player.play();
+    }
+  }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() async {
+    if (onPause != null) {
+      await onPause!();
+    } else {
+      await _player.pause();
+    }
+  }
 
   @override
   Future<void> stop() async {

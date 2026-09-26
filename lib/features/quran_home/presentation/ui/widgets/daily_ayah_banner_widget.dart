@@ -91,6 +91,21 @@ class DailyAyahBannerWidget extends ConsumerWidget {
                 Image.asset(
                   'assets/images/daily_ayah_bg.jpg',
                   fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFF0C2B22),
+                            Color(0xFF142434),
+                            Color(0xFF0F1E28),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
 
                 // B) Atmospheric Gradient Overlay (Ensures perfect text readability)

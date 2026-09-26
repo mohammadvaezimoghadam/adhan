@@ -13,3 +13,4 @@ const String smartDeviceRoute = "smart_device";
 const String surahDictionaryRoute = "surah_dictionary";
 const String vipSubscriptionRoute = "vip_subscription";
 const String profileRoute = "profile";
+const String tafsirReaderRoute = "tafsir_reader";

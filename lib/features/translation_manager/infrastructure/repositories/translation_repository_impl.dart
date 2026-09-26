@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -71,6 +72,11 @@ class TranslationRepositoryImpl with DioExceptionMapper implements ITranslationR
 
   @override
   Future<Result<void, Failure>> preloadTranslationFromJson(String translationId, String assetPath) async {
+    if (kIsWeb) {
+      // In web mode, avoid loading 1.5MB JSON asset from the host server.
+      // All translations on Web are fetched on-demand from AlQuran Cloud API.
+      return const Success(null);
+    }
     try {
       final downloadedIds = _localDataSource.getDownloadedTranslationIds();
       if (downloadedIds.contains(translationId)) {

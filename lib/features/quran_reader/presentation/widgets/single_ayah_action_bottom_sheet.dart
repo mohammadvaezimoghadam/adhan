@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../common/extensions/ayah_extension.dart';
@@ -19,6 +20,7 @@ import '../../application/controllers/quran_display_settings_controller.dart';
 import '../../application/controllers/quran_reader_controller.dart';
 import '../../application/controllers/selected_ayah_action_provider.dart';
 import '../../domain/entities/ayah_entity.dart';
+import '../../../tafsir_manager/presentation/widgets/tafsir_selection_dialog.dart';
 import '../utils/reciter_download_helper.dart';
 import 'word_by_word_bottom_sheet.dart';
 
@@ -43,6 +45,27 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
     required String surahName,
     required int totalAyahsInSurah,
   }) {
+    if (context.isWideScreen) {
+      return showDialog(
+        context: context,
+        builder: (context) => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Material(
+                color: Colors.transparent,
+                child: SingleAyahActionBottomSheet(
+                  ayah: ayah,
+                  surahName: surahName,
+                  totalAyahsInSurah: totalAyahsInSurah,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -120,7 +143,7 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                 bottomSpacing: 14,
               ),
 
-              // 3. Grid of 5 Standard Ayah Actions
+              // Row 1: Study & Listening (پخش، تفسیر، لغت‌نامه)
               Row(
                 children: [
                   // Action 1: Play / Pause Ayah (پخش / توقف آیه)
@@ -165,7 +188,72 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                   ),
                   8.hSpace,
 
-                  // Action 2: Bookmark Ayah (نشانه‌گذاری آیه)
+                  // Action 2: Tafsir (تفسیر آیه)
+                  Expanded(
+                    child: _buildActionButton(
+                      context: context,
+                      isDark: isDark,
+                      cardBg: cardBg,
+                      borderColor: borderColor,
+                      iconWidget: SvgPicture.asset(
+                        'assets/icons/ic_tafsir.svg',
+                        width: 22,
+                        height: 22,
+                        fit: BoxFit.contain,
+                        colorFilter: ColorFilter.mode(
+                          isDark ? Colors.white70 : Colors.black87,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                      label: 'تفسیر',
+                      onTap: () {
+                        final navContext = rootNavigatorKey.currentContext ?? context;
+                        final container = ProviderScope.containerOf(navContext, listen: false);
+                        Navigator.of(context).pop();
+                        container.read(selectedAyahActionProvider.notifier).clearSelection();
+
+                        TafsirSelectionDialog.show(
+                          navContext,
+                          ayah: ayah,
+                          surahName: cleanSurahName,
+                        );
+                      },
+                    ),
+                  ),
+                  8.hSpace,
+
+                  // Action 3: Dictionary / Word by Word (لغت‌نامه)
+                  Expanded(
+                    child: _buildActionButton(
+                      context: context,
+                      isDark: isDark,
+                      cardBg: cardBg,
+                      borderColor: borderColor,
+                      icon: CupertinoIcons.book,
+                      iconColor: isDark ? Colors.white70 : Colors.black87,
+                      label: 'لغت‌نامه',
+                      onTap: () {
+                        final navContext = rootNavigatorKey.currentContext ?? context;
+                        final container = ProviderScope.containerOf(navContext, listen: false);
+                        Navigator.of(context).pop();
+                        container.read(selectedAyahActionProvider.notifier).clearSelection();
+                        WordByWordBottomSheet.show(
+                          navContext,
+                          surahId: ayah.surahId,
+                          surahName: cleanSurahName,
+                          ayahNumber: ayah.ayahNumber,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              8.vSpace,
+
+              // Row 2: Utilities & Actions (نشانه‌گذاری، کپی، اشتراک)
+              Row(
+                children: [
+                  // Action 4: Bookmark Ayah (نشانه‌گذاری آیه)
                   Expanded(
                     child: _buildActionButton(
                       context: context,
@@ -214,33 +302,7 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                   ),
                   8.hSpace,
 
-                  // Action 3: Dictionary / Word by Word (لغت‌نامه)
-                  Expanded(
-                    child: _buildActionButton(
-                      context: context,
-                      isDark: isDark,
-                      cardBg: cardBg,
-                      borderColor: borderColor,
-                      icon: CupertinoIcons.book,
-                      iconColor: isDark ? Colors.white70 : Colors.black87,
-                      label: 'لغت‌نامه',
-                      onTap: () {
-                        final navContext = rootNavigatorKey.currentContext ?? context;
-                        final container = ProviderScope.containerOf(navContext, listen: false);
-                        Navigator.of(context).pop();
-                        container.read(selectedAyahActionProvider.notifier).clearSelection();
-                        WordByWordBottomSheet.show(
-                          navContext,
-                          surahId: ayah.surahId,
-                          surahName: cleanSurahName,
-                          ayahNumber: ayah.ayahNumber,
-                        );
-                      },
-                    ),
-                  ),
-                  8.hSpace,
-
-                  // Action 4: Copy (کپی آیه)
+                  // Action 5: Copy (کپی آیه)
                   Expanded(
                     child: _buildActionButton(
                       context: context,
@@ -278,7 +340,7 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                   ),
                   8.hSpace,
 
-                  // Action 5: Share (اشتراک‌گذاری)
+                  // Action 6: Share (اشتراک‌گذاری)
                   Expanded(
                     child: _buildActionButton(
                       context: context,
@@ -312,7 +374,7 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                   ),
                 ],
               ),
-              8.vSpace,
+              6.vSpace,
             ],
           ),
         ),
@@ -325,13 +387,14 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
     required bool isDark,
     required Color cardBg,
     required Color borderColor,
-    required IconData icon,
-    required Color iconColor,
+    IconData? icon,
+    Widget? iconWidget,
+    Color? iconColor,
     required String label,
     required VoidCallback onTap,
   }) {
     return Container(
-      height: 72,
+      height: 64,
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
@@ -344,11 +407,18 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2.0),
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 21, color: iconColor),
+                if (iconWidget != null)
+                  SizedBox(
+                    width: 21,
+                    height: 21,
+                    child: Center(child: iconWidget),
+                  )
+                else if (icon != null)
+                  Icon(icon, size: 21, color: iconColor),
                 5.vSpace,
                 Text(
                   label,
@@ -357,7 +427,7 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontFamily: AppTypography.fontFamily,
-                    fontSize: 10.5,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white70 : const Color(0xFF4A463F),
                   ),

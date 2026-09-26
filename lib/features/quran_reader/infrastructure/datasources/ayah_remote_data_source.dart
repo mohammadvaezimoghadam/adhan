@@ -11,24 +11,28 @@ final ayahRemoteDataSourceProvider = Provider<IAyahRemoteDataSource>((ref) {
 });
 
 abstract class IAyahRemoteDataSource {
-  Future<List<AyahEntity>> getAyahsBySurah(int surahId);
+  Future<List<AyahEntity>> getAyahsBySurah(int surahId, {String? translationId});
 }
 
 class AyahRemoteDataSource implements IAyahRemoteDataSource {
   final Dio _dio;
-  final Map<int, List<AyahEntity>> _cache = {};
+  final Map<String, List<AyahEntity>> _cache = {};
 
   AyahRemoteDataSource(this._dio);
 
   @override
-  Future<List<AyahEntity>> getAyahsBySurah(int surahId) async {
-    if (_cache.containsKey(surahId)) {
-      return _cache[surahId]!;
+  Future<List<AyahEntity>> getAyahsBySurah(int surahId, {String? translationId}) async {
+    final edition = (translationId != null && translationId.trim().isNotEmpty)
+        ? translationId.trim()
+        : 'fa.makarem';
+    final cacheKey = '$surahId-$edition';
+    if (_cache.containsKey(cacheKey)) {
+      return _cache[cacheKey]!;
     }
 
     try {
-      final url = '${AppConstants.alQuranCloudBaseUrl}/surah/$surahId/editions/quran-uthmani,fa.makarem';
-      debugPrint('🌐 [AyahRemoteDataSource] Fetching ayahs for surah $surahId from $url ...');
+      final url = '${AppConstants.alQuranCloudBaseUrl}/surah/$surahId/editions/quran-uthmani,$edition';
+      debugPrint('🌐 [AyahRemoteDataSource] Fetching ayahs for surah $surahId ($edition) from $url ...');
       final response = await _dio.get(url);
 
       if (response.statusCode == 200 && response.data != null) {
@@ -70,8 +74,8 @@ class AyahRemoteDataSource implements IAyahRemoteDataSource {
             ));
           }
 
-          _cache[surahId] = ayahs;
-          debugPrint('✅ [AyahRemoteDataSource] Loaded ${ayahs.length} ayahs for surah $surahId.');
+          _cache[cacheKey] = ayahs;
+          debugPrint('✅ [AyahRemoteDataSource] Loaded ${ayahs.length} ayahs for surah $surahId ($edition).');
           return ayahs;
         }
       }

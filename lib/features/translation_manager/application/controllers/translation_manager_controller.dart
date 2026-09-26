@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -26,8 +27,10 @@ class TranslationManagerController extends _$TranslationManagerController {
   Future<TranslationManagerState> _loadInitialState() async {
     final repository = ref.read(translationRepositoryProvider);
     
-    // Ensure default Makarem translation is preloaded
-    await repository.preloadTranslationFromJson('fa.makarem', 'assets/database/fa_makarem.json');
+    // Ensure default Makarem translation is preloaded on native platforms
+    if (!kIsWeb) {
+      await repository.preloadTranslationFromJson('fa.makarem', 'assets/database/fa_makarem.json');
+    }
     
     final translationsResult = await repository.getAllTranslations();
     final translations = translationsResult.tryGetSuccess() ?? [];

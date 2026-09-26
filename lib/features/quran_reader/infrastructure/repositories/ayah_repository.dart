@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:multiple_result/multiple_result.dart';
 
 import '../../../../common/exceptions/failure.dart';
+import '../../../translation_manager/application/controllers/translation_manager_controller.dart';
 import '../../domain/entities/ayah_entity.dart';
 import '../../domain/entities/word_entity.dart';
 import '../../domain/repositories/i_ayah_repository.dart';
@@ -12,7 +13,8 @@ import '../datasources/ayah_remote_data_source.dart';
 final ayahRepositoryProvider = Provider<IAyahRepository>((ref) {
   if (kIsWeb) {
     final remoteDataSource = ref.watch(ayahRemoteDataSourceProvider);
-    return AyahRemoteRepository(remoteDataSource);
+    final activeTransId = ref.watch(translationManagerControllerProvider).value?.activeTranslationId ?? 'fa.makarem';
+    return AyahRemoteRepository(remoteDataSource, activeTranslationId: activeTransId);
   }
   final localDataSource = ref.watch(ayahLocalDataSourceProvider);
   return AyahRepository(localDataSource);
@@ -78,13 +80,20 @@ class AyahRepository implements IAyahRepository {
 
 class AyahRemoteRepository implements IAyahRepository {
   final IAyahRemoteDataSource _remoteDataSource;
+  final String activeTranslationId;
 
-  AyahRemoteRepository(this._remoteDataSource);
+  AyahRemoteRepository(
+    this._remoteDataSource, {
+    this.activeTranslationId = 'fa.makarem',
+  });
 
   @override
   Future<Result<List<AyahEntity>, Failure>> getAyahsBySurah(int surahId) async {
     try {
-      final entities = await _remoteDataSource.getAyahsBySurah(surahId);
+      final entities = await _remoteDataSource.getAyahsBySurah(
+        surahId,
+        translationId: activeTranslationId,
+      );
       if (entities.isEmpty) {
         return const Error(Failure(message: 'هیچ آیه‌ای برای این سوره یافت نشد.'));
       }

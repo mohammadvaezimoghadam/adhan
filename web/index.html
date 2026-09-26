@@ -23,10 +23,79 @@
       margin: 0;
       padding: 0;
       background-color: #020E0B;
+      color: #E2ECE9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Vazirmatn", sans-serif;
+      overflow: hidden;
+    }
+    #loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: radial-gradient(circle at center, #072B22 0%, #020E0B 100%);
+      transition: opacity 0.4s ease-out;
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(212, 175, 55, 0.2);
+      border-top-color: #D4AF37;
+      border-radius: 50%;
+      animation: spin 0.9s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
+    }
+    .app-title {
+      font-size: 26px;
+      font-weight: 700;
+      color: #D4AF37;
+      letter-spacing: 0.5px;
+      margin-bottom: 20px;
+    }
+    .loading-text {
+      font-size: 13px;
+      color: #9EABA7;
+      margin-top: 16px;
+      direction: rtl;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
 <body>
+  <div id="loading-container">
+    <img src="favicon.png" width="76" height="76" style="border-radius: 18px; margin-bottom: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);" alt="لوگوی قرآن تفکر">
+    <div class="app-title">قرآن تفکر</div>
+    <div class="spinner"></div>
+    <div class="loading-text">در حال راه‌اندازی نرم‌افزار...</div>
+  </div>
+  <script>
+    // Enforce local CanvasKit loading without external CDN requests
+    window._flutter = window._flutter || {};
+    Object.defineProperty(window._flutter, 'buildConfig', {
+      get: function() {
+        return this._config;
+      },
+      set: function(val) {
+        if (val) {
+          val.useLocalCanvasKit = true;
+        }
+        this._config = val;
+      },
+      configurable: true,
+      enumerable: true
+    });
+
+    window.addEventListener('flutter-first-frame', function () {
+      const loader = document.getElementById('loading-container');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 400);
+      }
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

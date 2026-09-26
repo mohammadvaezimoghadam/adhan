@@ -721,17 +721,18 @@ class _SurahListItem extends ConsumerWidget {
     required ReciterEntity reciter,
   }) async {
     final isAudioTranslation = reciter.styleId == 4;
+    await ref.read(quranAudioControllerProvider.notifier).stop();
     if (isAudioTranslation) {
       await ref
           .read(quranAudioControllerProvider.notifier)
-          .selectTranslationReciter(reciter);
+          .selectTranslationReciter(reciter, autoRestart: false);
       ref
           .read(quranAudioControllerProvider.notifier)
           .setPlaybackMode(AudioPlaybackMode.onlyTranslation);
     } else {
       await ref
           .read(quranAudioControllerProvider.notifier)
-          .selectReciter(reciter);
+          .selectReciter(reciter, autoRestart: false);
       ref
           .read(quranAudioControllerProvider.notifier)
           .setPlaybackMode(AudioPlaybackMode.onlyQuran);
@@ -741,12 +742,11 @@ class _SurahListItem extends ConsumerWidget {
       context.pushNamed(
         quranReaderRoute,
         pathParameters: {'id': surah.number.toString()},
+        queryParameters: {
+          'ayah': '1',
+          'name': surah.name,
+        },
       );
-      ref.read(quranAudioControllerProvider.notifier).playAyah(
-            surahId: surah.number,
-            ayahNumber: 1,
-            totalAyahsInSurah: surah.numberOfAyahs,
-          );
     }
   }
 
@@ -936,6 +936,7 @@ class _SurahListItem extends ConsumerWidget {
                       onTap: () async {
                         Navigator.pop(sheetCtx);
 
+                        await ref.read(quranAudioControllerProvider.notifier).stop();
                         if (isAudioTranslation) {
                           await ref
                               .read(quranAudioControllerProvider.notifier)
@@ -956,12 +957,11 @@ class _SurahListItem extends ConsumerWidget {
                           context.pushNamed(
                             quranReaderRoute,
                             pathParameters: {'id': surah.number.toString()},
+                            queryParameters: {
+                              'ayah': '1',
+                              'name': surah.name,
+                            },
                           );
-                          ref.read(quranAudioControllerProvider.notifier).playAyah(
-                                surahId: surah.number,
-                                ayahNumber: 1,
-                                totalAyahsInSurah: surah.numberOfAyahs,
-                              );
                         }
                       },
                     ),

@@ -21,6 +21,7 @@ import 'core/services/notification/firebase_push_notification_service_impl.dart'
 import 'core/services/notification/i_push_notification_service.dart';
 import 'core/services/notification/push_notification_providers.dart';
 import 'features/bookmarks/infrastructure/datasources/bookmark_local_datasource.dart';
+import 'features/tafsir_manager/infrastructure/datasources/tafsir_local_datasource.dart';
 import 'features/translation_manager/infrastructure/datasources/translation_local_datasource.dart';
 import 'main_widget.dart';
 
@@ -51,6 +52,40 @@ Future<void> _initAudioSession() async {
   } catch (_) {}
 }
 
+Future<void> _initHiveBoxes() async {
+  try {
+    await Hive.initFlutter().timeout(const Duration(seconds: 2));
+    await Future.wait([
+      Hive.openBox(TranslationLocalDataSource.boxName),
+      Hive.openBox(TafsirLocalDataSource.boxName),
+      Hive.openBox(AudioStorageServiceImpl.boxName),
+      Hive.openBox(BookmarkLocalDataSource.boxName),
+    ]).timeout(const Duration(seconds: 3));
+    debugPrint('✅ [Hive] initialized successfully');
+  } catch (e) {
+    debugPrint('⚠️ [Hive] init error or timeout: $e');
+  }
+}
+
+Future<SharedPreferences> _initSharedPreferences() async {
+  try {
+    return await SharedPreferences.getInstance().timeout(
+      const Duration(seconds: 3),
+      onTimeout: () async {
+        debugPrint('⚠️ [SharedPreferences] timed out, falling back to in-memory');
+        // ignore: invalid_use_of_visible_for_testing_member
+        SharedPreferences.setMockInitialValues({});
+        return await SharedPreferences.getInstance();
+      },
+    );
+  } catch (e) {
+    debugPrint('⚠️ [SharedPreferences] error: $e');
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+    return await SharedPreferences.getInstance();
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterError.onError = (details) {
@@ -64,23 +99,17 @@ void main() async {
     usePathUrlStrategy();
   }
 
-  // Initialize critical local services concurrently for fast startup
+  // Load custom fonts in background without blocking app launch
+  unawaited(_loadCustomFonts());
+
+  // Initialize critical local services concurrently with timeouts for fast startup
+  final sharedPrefsFuture = _initSharedPreferences();
   final initFutures = Future.wait([
-    _loadCustomFonts().catchError((e) {
-      debugPrint('Custom fonts load error: $e');
-    }),
     _initAudioSession().catchError((e) {
       debugPrint('Audio session error: $e');
     }),
-    Hive.initFlutter().then((_) => Future.wait([
-      Hive.openBox(TranslationLocalDataSource.boxName),
-      Hive.openBox(AudioStorageServiceImpl.boxName),
-      Hive.openBox(BookmarkLocalDataSource.boxName),
-    ])).catchError((e) {
-      debugPrint('Hive init error: $e');
-      return <Box<dynamic>>[];
-    }),
-    SharedPreferences.getInstance(),
+    _initHiveBoxes(),
+    sharedPrefsFuture,
     FirebaseInitializer.init().catchError((e) {
       debugPrint('Firebase init error: $e');
     }),
@@ -103,8 +132,9 @@ void main() async {
     );
   }
 
-  final results = await initFutures;
-  final sharedPreferences = results[3] as SharedPreferences;
+  await initFutures;
+  final sharedPreferences = await sharedPrefsFuture;
+  debugPrint('🚀 [App Startup] all services ready, calling runApp()...');
 
   // Initialize Push Notification Service in background without blocking app launch
   final IPushNotificationService pushNotificationService;

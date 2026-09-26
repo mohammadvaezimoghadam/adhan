@@ -17,6 +17,8 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../surah_list/application/controllers/surah_list_controller.dart';
 import '../../../surah_list/domain/entities/surah_entity.dart';
 import '../../application/controllers/quran_audio_controller.dart';
+import '../../../../common/extensions/context_extension.dart';
+import '../../../main_navigation/presentation/widgets/web_docked_audio_player_bar.dart';
 import '../../application/controllers/quran_display_settings_controller.dart';
 import '../../application/controllers/quran_reader_controller.dart';
 import '../../application/controllers/selected_ayah_action_provider.dart';
@@ -419,14 +421,59 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
         extendBody: true,
         body: Stack(
           children: [
-          // 1. Column containing Header (AppBar + InfoBar) and Bounded PageView (Expanded)
-          Column(
-            children: [
-              // Top Header & QuranInfoBar (AnimatedContainer collapses height in full-screen)
-              AnimatedContainer(
+          // 1. Quran PageView (Full Screen, underneath the header overlay)
+          Positioned.fill(
+                child: RepaintBoundary(
+                  child: Listener(
+                    onPointerDown: _onPointerDown,
+                    onPointerMove: _onPointerMove,
+                    onPointerUp: _onPointerUp,
+                    onPointerCancel: _onPointerUp,
+                    child: GestureDetector(
+                      onTap: () {
+                        if (_isFullScreen) {
+                          _toggleControls();
+                        }
+                      },
+                      behavior: HitTestBehavior.translucent,
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: 114,
+                        onPageChanged: _onPageChanged,
+                        physics: const BouncingScrollPhysics(),
+                        itemBuilder: (context, pageIndex) {
+                          final pageSurahId = pageIndex + 1;
+                          final isTargetPage = pageSurahId == currentSurahId ||
+                              pageSurahId == _targetSurahId ||
+                              (currentSurahId != widget.surahId &&
+                                  pageSurahId == widget.surahId);
+                          final initialAyahForPage = (pageSurahId == _targetSurahId)
+                              ? _targetAyahNumber
+                              : (pageSurahId == widget.surahId ? widget.initialAyahNumber : null);
+                          return SurahAyahPageView(
+                            key: ValueKey('surah_page_$pageSurahId'),
+                            surahId: pageSurahId,
+                            surahName: _getSurahName(ref, pageSurahId),
+                            isCurrentPage: isTargetPage,
+                            initialAyahNumber: initialAyahForPage,
+                            translationId: widget.translationId,
+                            topPadding: headerHeight + 8.0,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // 2. Animated Header (Overlaid on top of the PageView)
+              AnimatedPositioned(
                 duration: const Duration(milliseconds: 350),
                 curve: Curves.easeInOutCubic,
-                height: controlsHidden ? 0 : headerHeight,
+                top: controlsHidden ? -headerHeight : 0,
+                left: 0,
+                right: 0,
+                height: headerHeight,
                 child: ClipRect(
                   child: OverflowBox(
                     alignment: Alignment.bottomCenter,
@@ -639,7 +686,7 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                            );
                          },
                        ),
-                        ),
+                       ),
                         QuranInfoBar(
                           onTargetSelected: _handleTargetSelected,
                         ),
@@ -649,77 +696,33 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                 ),
               ),
 
-              // Quran PageView (Bounded directly below QuranInfoBar — zero scroll under header!)
-              Expanded(
-                child: RepaintBoundary(
-                  child: Listener(
-                    onPointerDown: _onPointerDown,
-                    onPointerMove: _onPointerMove,
-                    onPointerUp: _onPointerUp,
-                    onPointerCancel: _onPointerUp,
-                    child: GestureDetector(
-                      onTap: () {
-                        if (_isFullScreen) {
-                          _toggleControls();
-                        }
-                      },
-                      behavior: HitTestBehavior.translucent,
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: 114,
-                        onPageChanged: _onPageChanged,
-                        physics: const BouncingScrollPhysics(),
-                        itemBuilder: (context, pageIndex) {
-                          final pageSurahId = pageIndex + 1;
-                          final isTargetPage = pageSurahId == currentSurahId ||
-                              pageSurahId == _targetSurahId ||
-                              (currentSurahId != widget.surahId &&
-                                  pageSurahId == widget.surahId);
-                          final initialAyahForPage = (pageSurahId == _targetSurahId)
-                              ? _targetAyahNumber
-                              : (pageSurahId == widget.surahId ? widget.initialAyahNumber : null);
-                          return SurahAyahPageView(
-                            key: ValueKey('surah_page_$pageSurahId'),
-                            surahId: pageSurahId,
-                            surahName: _getSurahName(ref, pageSurahId),
-                            isCurrentPage: isTargetPage,
-                            initialAyahNumber: initialAyahForPage,
-                            translationId: widget.translationId,
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          // 3. Bottom Audio Player Bar (Positioned at bottom, capsule slides behind disc)
+          // 3. Bottom Audio Player Bar (Positioned at bottom)
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             child: RepaintBoundary(
-              child: isAudioPlayingOtherSurah
-                  ? const MiniAudioPlayerBar(includeBottomInset: true)
-                  : AudioPlayerBottomBar(
-                      surahId: currentSurahId,
-                      isFullScreen: _isFullScreen,
-                      isCollapsed: _isAudioBarCollapsed,
-                      onToggleCollapse: () {
-                        if (_isFullScreen) {
-                          _toggleControls();
-                        } else {
-                          setState(() {
-                            _isAudioBarCollapsed = !_isAudioBarCollapsed;
-                          });
-                          ref.read(readerControlsProvider.notifier).updateState(
-                            isAudioBarCollapsed: _isAudioBarCollapsed,
-                          );
-                        }
-                      },
-                    ),
+              child: context.isWideScreen
+                  ? const WebDockedAudioPlayerBar()
+                  : (isAudioPlayingOtherSurah
+                      ? const MiniAudioPlayerBar(includeBottomInset: true)
+                      : AudioPlayerBottomBar(
+                          surahId: currentSurahId,
+                          isFullScreen: _isFullScreen,
+                          isCollapsed: _isAudioBarCollapsed,
+                          onToggleCollapse: () {
+                            if (_isFullScreen) {
+                              _toggleControls();
+                            } else {
+                              setState(() {
+                                _isAudioBarCollapsed = !_isAudioBarCollapsed;
+                              });
+                              ref.read(readerControlsProvider.notifier).updateState(
+                                isAudioBarCollapsed: _isAudioBarCollapsed,
+                              );
+                            }
+                          },
+                        )),
             ),
           ),
 

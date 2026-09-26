@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../common/responsive/responsive_layout.dart';
 import '../../../../common/widgets/app_snackbar.dart';
 import '../../../mini_audio_player/presentation/widgets/mini_audio_player_bar.dart';
 import '../../../quran_home/presentation/ui/quran_home_screen.dart';
@@ -10,6 +11,9 @@ import '../../../search/presentation/ui/search_screen.dart';
 import '../../../surah_list/presentation/ui/surah_list_screen.dart';
 import '../../application/tab_navigation_controller.dart';
 import '../widgets/app_bottom_nav_bar.dart';
+import '../widgets/app_navigation_rail.dart';
+import '../widgets/web_docked_audio_player_bar.dart';
+import '../widgets/web_top_nav_bar.dart';
 
 /// Enterprise-Grade Main Shell Screen with:
 /// - Lazy Tab Instantiation (zero overhead for unvisited tabs)
@@ -100,6 +104,15 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
       _loadedTabs.add(activeIndex);
     }
 
+    final body = Stack(
+      children: [
+        _buildTab(0, activeIndex == 0),
+        _buildTab(1, activeIndex == 1),
+        _buildTab(2, activeIndex == 2),
+        _buildTab(3, activeIndex == 3),
+      ],
+    );
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -127,29 +140,57 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
           SystemNavigator.pop();
         }
       },
-      child: Scaffold(
-        body: Stack(
-          children: [
-            _buildTab(0, activeIndex == 0),
-            _buildTab(1, activeIndex == 1),
-            _buildTab(2, activeIndex == 2),
-            _buildTab(3, activeIndex == 3),
-          ],
+      child: ResponsiveLayout(
+        // Mobile Layout (Bottom Nav)
+        mobile: Scaffold(
+          body: body,
+          bottomNavigationBar: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Floating Mini Player (only displays content when an audio item is loaded)
+              const MiniAudioPlayerBar(),
+              // Glassmorphic Tab Bar
+              AppBottomNavBar(
+                currentIndex: activeIndex,
+                onTabSelected: (index) {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  ref.read(tabNavigationControllerProvider.notifier).switchTab(index);
+                },
+              ),
+            ],
+          ),
         ),
-        bottomNavigationBar: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Floating Mini Player (only displays content when an audio item is loaded)
-            const MiniAudioPlayerBar(),
-            // Glassmorphic Tab Bar
-            AppBottomNavBar(
-              currentIndex: activeIndex,
-              onTabSelected: (index) {
-                FocusManager.instance.primaryFocus?.unfocus();
-                ref.read(tabNavigationControllerProvider.notifier).switchTab(index);
-              },
-            ),
-          ],
+        // Desktop Layout (Sidebar Nav + Top Web Nav + Docked Web Audio Player)
+        desktop: Scaffold(
+          body: Row(
+            children: [
+              // Navigation Rail (Right side for RTL)
+              AppNavigationRail(
+                currentIndex: activeIndex,
+                onTabSelected: (index) {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  ref.read(tabNavigationControllerProvider.notifier).switchTab(index);
+                },
+              ),
+              // Main Content Area with Top Bar and Docked Player
+              Expanded(
+                child: Column(
+                  children: [
+                    // Universal Web Top Navigation Bar
+                    WebTopNavBar(
+                      onSearchTap: () {
+                        ref.read(tabNavigationControllerProvider.notifier).switchTab(2);
+                      },
+                    ),
+                    // Active Tab Body
+                    Expanded(child: body),
+                    // Docked Web Audio Player (spans full content width)
+                    const WebDockedAudioPlayerBar(),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

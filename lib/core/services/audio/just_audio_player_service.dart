@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'audio_error_parser.dart';
@@ -38,8 +39,10 @@ class JustAudioPlayerService implements IAudioPlayerService {
         final processingState = playerState.processingState;
         final isPlaying = playerState.playing;
 
-        // Skip emitting stopped state during internal track transitions
-        if (processingState == ProcessingState.idle && _isInternalTransition) {
+        // Skip emitting stopped or stale completed states during internal track transitions
+        if (_isInternalTransition &&
+            (processingState == ProcessingState.idle ||
+             processingState == ProcessingState.completed)) {
           return;
         }
 
@@ -70,10 +73,30 @@ class JustAudioPlayerService implements IAudioPlayerService {
     );
 
     _positionSubscription = _audioPlayer.positionStream.listen((position) {
+      if (_state.status == AudioStatus.completed) {
+        _state = _state.copyWith(position: position);
+        return;
+      }
+      final dur = _state.duration;
+      final remaining = dur - position;
+      final isNearOrAtEnd = dur > const Duration(seconds: 1) &&
+          (position >= dur || (remaining <= const Duration(milliseconds: 250) && remaining >= Duration.zero));
+
+      if (isNearOrAtEnd && _state.status == AudioStatus.playing) {
+        _updateState(_state.copyWith(
+          position: position,
+          status: AudioStatus.completed,
+        ));
+        return;
+      }
       _updateState(_state.copyWith(position: position));
     });
 
     _durationSubscription = _audioPlayer.durationStream.listen((duration) {
+      if (_state.status == AudioStatus.completed) {
+        _state = _state.copyWith(duration: duration ?? Duration.zero);
+        return;
+      }
       _updateState(_state.copyWith(duration: duration ?? Duration.zero));
     });
   }
@@ -106,15 +129,72 @@ class JustAudioPlayerService implements IAudioPlayerService {
 
     _isInternalTransition = true;
     try {
-      // Pause (NOT stop) current playback to keep ExoPlayer instance alive.
-      // stop() causes ExoPlayer to Release → Android kills foreground notification.
-      // pause() keeps the native player alive so setUrl() just swaps the source.
-      if (_audioPlayer.playing) {
-        await _audioPlayer.pause();
+      if (kIsWeb) {
+        // On Web, HTML5 <audio> element must be stopped before changing source.
+        // play() on web resolves only when playback ENDS, so if a track is playing,
+        // setUrl(newUrl) may be ignored because the element is still attached to the old source.
+        // Calling stop() releases the element and resets it for a clean source switch.
+        if (_audioPlayer.playing || _audioPlayer.processingState == ProcessingState.completed) {
+          await _audioPlayer.stop();
+        }
+
+        for (int attempt = 0; attempt <= _maxRetries; attempt++) {
+          if (_playGeneration != generation) return;
+
+          try {
+            await _audioPlayer.setUrl(url).timeout(
+              _loadTimeout,
+              onTimeout: () {
+                throw TimeoutException(
+                  'سرور صوت پاسخ نمی‌دهد. لطفاً اتصال اینترنت خود را بررسی کنید.',
+                  _loadTimeout,
+                );
+              },
+            );
+
+            if (_playGeneration != generation) return;
+
+            // Proactively emit playing status on web
+            _updateState(_state.copyWith(status: AudioStatus.playing));
+
+            unawaited(_audioPlayer.play().catchError((e) {
+              debugPrint('🛑 [Web Audio Play Error] $e');
+              if (_playGeneration == generation) {
+                _updateState(
+                  _state.copyWith(
+                    status: AudioStatus.error,
+                    errorMessage: AudioErrorParser.parseError(e),
+                  ),
+                );
+              }
+            }));
+            return; // Exit retry loop on success
+          } catch (e) {
+            if (_playGeneration != generation) return;
+            final isLastAttempt = attempt == _maxRetries;
+            final isRetryable = _isRetryableError(e);
+            if (isLastAttempt || !isRetryable) {
+              if (_playGeneration == generation) {
+                _updateState(
+                  _state.copyWith(
+                    status: AudioStatus.error,
+                    errorMessage: AudioErrorParser.parseError(e),
+                  ),
+                );
+              }
+              return;
+            }
+            await Future.delayed(Duration(seconds: 1 << attempt));
+          }
+        }
+        return;
       }
 
-      // Brief delay for native MediaCodec to settle before loading new source
-      await Future.delayed(const Duration(milliseconds: 20));
+      // Non-web platforms (Android, iOS, Desktop)
+      // We DO NOT call pause() or stop() before setUrl.
+      // Calling pause() sets playing=false, which drops the Android wakelock
+      // and causes aggressive battery optimizers (like Oppo) to sleep the app
+      // before the next track can load. setUrl() while playing is safe.
 
       // Bail out if a newer play() was called during stop/delay
       if (_playGeneration != generation) return;
@@ -125,24 +205,54 @@ class JustAudioPlayerService implements IAudioPlayerService {
         if (_playGeneration != generation) return;
 
         try {
-          await _audioPlayer.setUrl(url).timeout(
-            _loadTimeout,
-            onTimeout: () {
-              throw TimeoutException(
-                'سرور صوت پاسخ نمی‌دهد. لطفاً اتصال اینترنت خود را بررسی کنید.',
-                _loadTimeout,
-              );
-            },
-          );
+          final isRemote = url.startsWith('http://') || url.startsWith('https://');
+          if (isRemote) {
+            await _audioPlayer.setUrl(url).timeout(
+              _loadTimeout,
+              onTimeout: () {
+                throw TimeoutException(
+                  'سرور صوت پاسخ نمی‌دهد. لطفاً اتصال اینترنت خود را بررسی کنید.',
+                  _loadTimeout,
+                );
+              },
+            );
+          } else {
+            final cleanPath = url.startsWith('file://')
+                ? Uri.parse(url).toFilePath()
+                : url;
+            await _audioPlayer.setFilePath(cleanPath).timeout(
+              _loadTimeout,
+              onTimeout: () {
+                throw TimeoutException(
+                  'خطا در بارگذاری فایل صوت محلی.',
+                  _loadTimeout,
+                );
+              },
+            );
+          }
 
           // Bail out if superseded while waiting for setUrl
           if (_playGeneration != generation) return;
 
-          // Reset position to start of new track (pause keeps old position)
-          await _audioPlayer.seek(Duration.zero);
+          // Removed seek(Duration.zero) as setUrl/setFilePath already resets the position,
+          // and seeking immediately after can cause ExoPlayer to stall on some devices.
 
-          // Successful load — start playback
-          await _audioPlayer.play();
+          // Fire-and-forget: just_audio's play() Future completes only when
+          // playback finishes (not when it starts).  Awaiting it here would
+          // block the entire call-chain (including QuranAudioController's
+          // _onTrackCompleted), preventing the completion handler from ever
+          // firing for the *next* track.
+          unawaited(_audioPlayer.play().catchError((e) {
+            debugPrint('🛑 [Native Audio Play Error] $e');
+            if (_playGeneration == generation) {
+              _updateState(
+                _state.copyWith(
+                  status: AudioStatus.error,
+                  errorMessage: AudioErrorParser.parseError(e),
+                ),
+              );
+            }
+          }));
           return; // Exit retry loop on success
         } catch (e) {
           if (_playGeneration != generation) return;
@@ -203,7 +313,25 @@ class JustAudioPlayerService implements IAudioPlayerService {
 
   @override
   Future<void> resume() async {
-    await _audioPlayer.play();
+    if (kIsWeb) {
+      unawaited(_audioPlayer.play().catchError((e) {
+        debugPrint('🛑 [Web Audio Resume Error] $e');
+      }));
+    } else {
+      final dur = _audioPlayer.duration;
+      final isNearEnd = dur != null &&
+          dur > const Duration(seconds: 1) &&
+          (_audioPlayer.position >= dur ||
+           (dur - _audioPlayer.position) <= const Duration(milliseconds: 250));
+      if (_audioPlayer.processingState == ProcessingState.completed || isNearEnd) {
+        await _audioPlayer.seek(Duration.zero);
+      }
+      // Fire-and-forget: same rationale as play() — avoid blocking the
+      // caller until playback finishes.
+      unawaited(_audioPlayer.play().catchError((e) {
+        debugPrint('🛑 [Native Audio Resume Error] $e');
+      }));
+    }
   }
 
   @override

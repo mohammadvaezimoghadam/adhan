@@ -54,6 +54,7 @@ dependencies:
   hive_flutter: ^1.1.0
   sqflite: ^2.4.3
   sqflite_common_ffi_web: ^0.4.3+3
+  archive: ^4.0.2
   path_provider: ^2.1.6
   path: ^1.9.1
   shared_preferences: ^2.5.5

@@ -21,6 +21,7 @@ import '../../domain/enums/audio_playback_mode.dart';
 import '../../domain/entities/ayah_theme_entity.dart';
 import '../../../subscription/application/vip_subscription_controller.dart';
 import '../../../subscription/presentation/widgets/vip_required_dialog.dart';
+import '../utils/reciter_download_helper.dart';
 import 'ayah_number_marker.dart';
 import 'ayah_theme_carousel.dart';
 import 'tashkeel_color_selector_tile.dart';
@@ -34,7 +35,7 @@ class QuickSettingsDrawer extends ConsumerStatefulWidget {
     this.initialTabIndex = 0,
   });
 
-  /// Helper method to display settings as a full-screen page.
+  /// Helper method to display settings as a full-screen page on mobile or centered modal on web.
   static Future<void> show(
     BuildContext context, {
     int initialTabIndex = 0,
@@ -46,13 +47,33 @@ class QuickSettingsDrawer extends ConsumerStatefulWidget {
     // Record baseline state before user makes changes in settings
     notifier.recordInitialState();
 
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => QuickSettingsDrawer(
-          initialTabIndex: initialTabIndex,
+    if (context.isWideScreen) {
+      await showDialog(
+        context: context,
+        builder: (context) => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 580, maxHeight: 760),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: Material(
+                color: Colors.transparent,
+                child: QuickSettingsDrawer(
+                  initialTabIndex: initialTabIndex,
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => QuickSettingsDrawer(
+            initialTabIndex: initialTabIndex,
+          ),
+        ),
+      );
+    }
 
     // Save ONLY if changes were made upon closing
     notifier.saveSettingsIfChanged();
@@ -283,14 +304,14 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
                   cardBgColor: cardBgColor,
                   children: [
                     SettingsSwitchTile(
-                      title: 'پس‌زمینه یکدست آیات',
-                      subtitle: 'یکنواخت‌سازی رنگ تمام آیات و حذف خطوط راه‌راه',
-                      value: settings.isAyahThemeSolid,
+                      title: 'تفکیک بصری آیات',
+                      subtitle: 'تغییر متناوب رنگ پس‌زمینه جهت تمایز و تفکیک آسان‌تر آیات',
+                      value: !settings.isAyahThemeSolid,
                       accentColor: accentColor,
                       textPrimary: textPrimary,
                       textSecondary: textSecondary,
                       onChanged: (val) =>
-                          displayNotifier.toggleAyahThemeSolid(val),
+                          displayNotifier.toggleAyahThemeSolid(!val),
                     ),
                   ],
                 ),
@@ -777,27 +798,43 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
                   padding: const EdgeInsets.symmetric(horizontal: 1.5),
                   child: InkWell(
                     onTap: () async {
-                      ref
-                          .read(quranAudioControllerProvider.notifier)
-                          .setPlaybackMode(mode);
-
+                      // VIP check first — don't switch mode if user doesn't have VIP
                       if (isLocked) {
                         await VipRequiredDialog.show(
                           context: context,
                           isTranslation: true,
                         );
-                        if (context.mounted) {
-                          final hasVipNow = ref.read(hasVipAccessProvider);
-                          if (hasVipNow) {
-                            ref
-                                .read(quranAudioControllerProvider.notifier)
-                                .setPlaybackMode(mode);
-                          } else {
+                        if (!context.mounted) return;
+                        final hasVipNow = ref.read(hasVipAccessProvider);
+                        if (!hasVipNow) return; // User didn't purchase, do nothing
+                      }
+
+                      // If the new mode includes translation, verify download
+                      // readiness BEFORE switching mode
+                      if (mode.includesTranslation && context.mounted) {
+                        // Temporarily set mode so checkAndPromptForPlayback
+                        // evaluates against the TARGET mode
+                        ref
+                            .read(quranAudioControllerProvider.notifier)
+                            .setPlaybackMode(mode);
+                        final isReady = await ReciterDownloadHelper.checkAndPromptForPlayback(
+                          context: context,
+                          ref: ref,
+                        );
+                        if (!isReady) {
+                          // Translation not downloaded → revert to onlyQuran
+                          if (context.mounted) {
                             ref
                                 .read(quranAudioControllerProvider.notifier)
                                 .setPlaybackMode(AudioPlaybackMode.onlyQuran);
                           }
+                          return;
                         }
+                      } else {
+                        // Mode doesn't include translation, just set it
+                        ref
+                            .read(quranAudioControllerProvider.notifier)
+                            .setPlaybackMode(mode);
                       }
                     },
                     borderRadius: BorderRadius.circular(20),

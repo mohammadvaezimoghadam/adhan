@@ -408,5 +408,6 @@ final vipSubscriptionControllerProvider =
 
 /// Convenience provider to easily check if current user holds VIP access.
 final hasVipAccessProvider = Provider<bool>((ref) {
+  if (VipSubscriptionState.isAllFeaturesFree) return true;
   return ref.watch(vipSubscriptionControllerProvider).hasVipAccess;
 });

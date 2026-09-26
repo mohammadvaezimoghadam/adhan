@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/quran_theme_colors.dart';
+import '../responsive/responsive_breakpoints.dart';
 
 /// Context extension for clean, ergonomic, and theme-driven UI development.
 extension ThemeContextExtension on BuildContext {
@@ -37,4 +38,16 @@ extension ThemeContextExtension on BuildContext {
 
   /// Screen padding (notch, bottom bar, etc.)
   EdgeInsets get screenPadding => MediaQuery.paddingOf(this);
+
+  // ── Responsive Helpers ──
+
+  /// Whether the screen is wide enough for desktop/web layout (>= 768px)
+  bool get isWideScreen => ResponsiveBreakpoints.isWideScreen(this);
+
+  /// Maximum content width for the current screen size.
+  /// On wide screens, content is constrained to avoid overly-long lines.
+  double get contentMaxWidth => isWideScreen
+      ? ResponsiveBreakpoints.maxContentWidth
+      : screenWidth;
 }
+

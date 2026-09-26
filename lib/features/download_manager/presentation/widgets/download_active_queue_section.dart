@@ -2,20 +2,21 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../common/constants/surah_constants.dart';
 import '../../../../common/extensions/int_extension.dart';
 import '../../../../common/extensions/context_extension.dart';
 import '../../../../common/widgets/app_cached_network_image.dart';
+import '../../../../core/routes/route_name.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../audio_manager/application/controllers/audio_download_controller.dart';
 import '../../../audio_manager/domain/entities/audio_download_task.dart';
+import '../../../quran_reader/application/controllers/quran_audio_controller.dart';
 import '../../../quran_reader/application/controllers/reciter_providers.dart';
 import '../../../quran_reader/domain/entities/reciter_entity.dart';
-import '../../../subscription/application/vip_subscription_controller.dart';
-import '../../../subscription/domain/policy/audio_vip_policy.dart';
+import '../../../quran_reader/domain/enums/audio_playback_mode.dart';
 import '../../../subscription/presentation/utils/audio_vip_helper.dart';
-import '../../../subscription/presentation/widgets/vip_required_dialog.dart';
 import '../../../translation_manager/application/controllers/translation_manager_controller.dart';
 import '../../../translation_manager/domain/entities/translation_entity.dart';
 
@@ -252,242 +253,269 @@ class _AudioQueueTaskItem extends ConsumerWidget {
             ),
           );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            // Reciter Avatar with circular percentage overlay
-            Container(
-              width: 42,
-              height: 42,
-              margin: const EdgeInsetsDirectional.only(end: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: (isDownloading || isPaused)
-                      ? context.colorScheme.primary.withValues(alpha: 0.45)
-                      : (isDark
-                          ? Colors.white.withValues(alpha: 0.12)
-                          : context.colors.cardBorder),
-                  width: 1.0,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openSurah(context, ref),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2.0),
+          child: Row(
+            children: [
+              // Reciter Avatar with circular percentage overlay
+              Container(
+                width: 42,
+                height: 42,
+                margin: const EdgeInsetsDirectional.only(end: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: (isDownloading || isPaused)
+                        ? context.colorScheme.primary.withValues(alpha: 0.45)
+                        : (isDark
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : context.colors.cardBorder),
+                    width: 1.0,
+                  ),
                 ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(9),
-                child: Stack(
-                  fit: StackFit.expand,
-                  alignment: Alignment.center,
-                  children: [
-                    baseAvatar,
-                    if (isDownloading || isPaused) ...[
-                      // Dark scrim overlay for high contrast
-                      Container(
-                        color: Colors.black.withValues(alpha: 0.52),
-                      ),
-                      // Circular progress indicator with centered Persian percentage
-                      Center(
-                        child: SizedBox(
-                          width: 30,
-                          height: 30,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              CircularProgressIndicator(
-                                value: task.progress.clamp(0.0, 1.0),
-                                strokeWidth: 2.2,
-                                color: context.colorScheme.primary,
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.25),
-                              ),
-                              Text(
-                                '${percent.toPersianDigit()}٪',
-                                style: const TextStyle(
-                                  fontFamily: AppTypography.fontFamily,
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  height: 1.0,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ] else if (isFailed) ...[
-                      Container(
-                        color: Colors.black.withValues(alpha: 0.52),
-                        child: const Center(
-                          child: Icon(
-                            CupertinoIcons.arrow_counterclockwise,
-                            size: 18,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(9),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    alignment: Alignment.center,
                     children: [
-                      Flexible(
-                        child: Text(
-                          'سوره $surahName',
-                          style: const TextStyle(
-                            fontFamily: AppTypography.fontFamily,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
+                      baseAvatar,
+                      if (isDownloading || isPaused) ...[
+                        // Dark scrim overlay for high contrast
+                        Container(
+                          color: Colors.black.withValues(alpha: 0.52),
+                        ),
+                        // Circular progress indicator with centered Persian percentage
+                        Center(
+                          child: SizedBox(
+                            width: 30,
+                            height: 30,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                CircularProgressIndicator(
+                                  value: task.progress.clamp(0.0, 1.0),
+                                  strokeWidth: 2.2,
+                                  color: context.colorScheme.primary,
+                                  backgroundColor:
+                                      Colors.white.withValues(alpha: 0.25),
+                                ),
+                                Text(
+                                  '${percent.toPersianDigit()}٪',
+                                  style: const TextStyle(
+                                    fontFamily: AppTypography.fontFamily,
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    height: 1.0,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '• $badgeLabel',
-                        style: TextStyle(
-                          fontFamily: AppTypography.fontFamily,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: badgeColor,
+                      ] else if (isFailed) ...[
+                        Container(
+                          color: Colors.black.withValues(alpha: 0.52),
+                          child: const Center(
+                            child: Icon(
+                              CupertinoIcons.arrow_counterclockwise,
+                              size: 18,
+                              color: Colors.white70,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          cleanReciterName,
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'سوره $surahName',
+                            style: const TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '• $badgeLabel',
                           style: TextStyle(
                             fontFamily: AppTypography.fontFamily,
                             fontSize: 11,
-                            color: isDark ? Colors.white60 : Colors.black54,
+                            fontWeight: FontWeight.w600,
+                            color: badgeColor,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '(${task.completedAyahs.toPersianDigit()}/${task.totalAyahs.toPersianDigit()})',
-                        style: TextStyle(
-                          fontFamily: AppTypography.fontFamily,
-                          fontSize: 10.5,
-                          color: isDark ? Colors.white54 : Colors.black45,
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            cleanReciterName,
+                            style: TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 11,
+                              color: isDark ? Colors.white60 : Colors.black54,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                        const SizedBox(width: 6),
+                        Text(
+                          '(${task.completedAyahs.toPersianDigit()}/${task.totalAyahs.toPersianDigit()})',
+                          style: TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 10.5,
+                            color: isDark ? Colors.white54 : Colors.black45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            // Action buttons (Icon for pause/resume + plain text 'حذف')
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isDownloading)
+              // Action buttons: Play + Delete ('حذف')
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   IconButton(
-                    tooltip: 'توقف',
+                    tooltip: isDownloading ? 'توقف' : (isFailed ? 'تلاش مجدد' : 'ادامه'),
                     visualDensity: VisualDensity.compact,
                     padding: const EdgeInsets.all(4),
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     icon: Icon(
-                      CupertinoIcons.pause_circle,
+                      isDownloading
+                          ? CupertinoIcons.pause_circle
+                          : (isFailed
+                              ? CupertinoIcons.arrow_clockwise_circle
+                              : CupertinoIcons.play_circle),
                       size: 22,
                       color: context.colorScheme.onSurfaceVariant,
                     ),
                     onPressed: () {
                       HapticFeedback.lightImpact();
-                      ref
-                          .read(audioDownloadControllerProvider.notifier)
-                          .pauseDownload(task.reciterId, task.surahId);
-                    },
-                  )
-                else if (isPaused || isFailed)
-                  IconButton(
-                    tooltip: 'ادامه',
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(4),
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    icon: Icon(
-                      CupertinoIcons.play_circle,
-                      size: 22,
-                      color: context.colorScheme.onSurfaceVariant,
-                    ),
-                    onPressed: () async {
-                      HapticFeedback.lightImpact();
-                      if (reciter != null) {
-                        final isVip = ref.read(hasVipAccessProvider);
-                        final isAudioTranslation = reciter!.styleId == 4;
-                        final canDownload = isAudioTranslation
-                            ? AudioVipPolicy.canPlayAudioTranslation(isVip: isVip)
-                            : AudioVipPolicy.canPlayReciter(
-                                reciterIdentifier: reciter!.identifier,
-                                surahId: task.surahId,
-                                isVip: isVip,
-                              );
-                        if (!canDownload) {
-                          if (isAudioTranslation) {
-                            await VipRequiredDialog.show(
-                              context: context,
-                              reciterName: reciter!.name,
-                              isTranslation: true,
-                            );
-                          } else {
-                            await AudioVipHelper.checkAndPromptVip(
-                              context: context,
-                              ref: ref,
-                              surahId: task.surahId,
-                              targetReciter: reciter!,
-                            );
-                          }
-                          return;
-                        }
+                      final controller = ref.read(audioDownloadControllerProvider.notifier);
+                      if (isDownloading) {
+                        controller.pauseDownload(task.reciterId, task.surahId);
+                      } else {
+                        controller.resumeDownloadById(
+                          reciterId: task.reciterId,
+                          surahId: task.surahId,
+                        );
                       }
-                      await ref
-                          .read(audioDownloadControllerProvider.notifier)
-                          .resumeDownloadById(
-                            reciterId: task.reciterId,
-                            surahId: task.surahId,
-                          );
                     },
                   ),
-                const SizedBox(width: 4),
-                InkWell(
-                  onTap: () async {
-                    HapticFeedback.lightImpact();
-                    await ref
-                        .read(audioDownloadControllerProvider.notifier)
-                        .cancelDownload(task.reciterId, task.surahId);
-                  },
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    child: Text(
-                      'حذف',
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w500,
-                        color: context.colorScheme.error,
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () async {
+                      HapticFeedback.lightImpact();
+                      await ref
+                          .read(audioDownloadControllerProvider.notifier)
+                          .cancelDownload(task.reciterId, task.surahId);
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      child: Text(
+                        'حذف',
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: context.colorScheme.error,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
-      ],
+      ),
     );
+  }
+
+  Future<void> _openSurah(BuildContext context, WidgetRef ref) async {
+    HapticFeedback.lightImpact();
+
+    ReciterEntity? targetReciter = reciter;
+    if (targetReciter == null) {
+      final allReciters = await ref.read(allRecitersListProvider.future);
+      targetReciter = allReciters
+          .tryGetSuccess()
+          ?.where((r) => r.id == task.reciterId)
+          .firstOrNull;
+    }
+
+    final isAudioTranslation = targetReciter?.styleId == 4;
+
+    if (targetReciter != null) {
+      if (!context.mounted) return;
+      if (isAudioTranslation) {
+        final isAllowed = AudioVipHelper.checkAudioTranslation(
+          context: context,
+          ref: ref,
+        );
+        if (!isAllowed) return;
+
+        await ref.read(quranAudioControllerProvider.notifier).stop();
+        await ref
+            .read(quranAudioControllerProvider.notifier)
+            .selectTranslationReciter(targetReciter, autoRestart: false);
+        ref
+            .read(quranAudioControllerProvider.notifier)
+            .setPlaybackMode(AudioPlaybackMode.onlyTranslation);
+      } else {
+        if (!context.mounted) return;
+        final isAllowed = await AudioVipHelper.checkAndPromptVip(
+          context: context,
+          ref: ref,
+          surahId: task.surahId,
+          targetReciter: targetReciter,
+        );
+        if (!isAllowed || !context.mounted) return;
+
+        await ref.read(quranAudioControllerProvider.notifier).stop();
+        await ref
+            .read(quranAudioControllerProvider.notifier)
+            .selectReciter(targetReciter, autoRestart: false);
+        ref
+            .read(quranAudioControllerProvider.notifier)
+            .setPlaybackMode(AudioPlaybackMode.onlyQuran);
+      }
+    }
+
+    if (context.mounted) {
+      context.pushNamed(
+        quranReaderRoute,
+        pathParameters: {'id': task.surahId.toString()},
+        queryParameters: {
+          'ayah': '1',
+          'name': surahName,
+        },
+      );
+    }
   }
 }
 
@@ -541,9 +569,9 @@ class _TextTranslationQueueTaskItem extends ConsumerWidget {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Muted book icon in background
+                    // Muted doc icon in background
                     Icon(
-                      CupertinoIcons.book,
+                      CupertinoIcons.doc_text,
                       size: 20,
                       color: (isDark ? Colors.white : Colors.black)
                           .withValues(alpha: 0.15),

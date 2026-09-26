@@ -19,6 +19,7 @@ import 'quran_reader_controller.dart';
 import '../../../subscription/application/vip_subscription_controller.dart';
 import '../../../subscription/domain/models/vip_subscription_state.dart';
 import '../../../subscription/domain/policy/audio_vip_policy.dart';
+import '../../../surah_list/infrastructure/datasources/static_surahs_data.dart';
 
 final quranAudioControllerProvider =
     NotifierProvider<QuranAudioController, QuranAudioState>(
@@ -28,12 +29,6 @@ final quranAudioControllerProvider =
 class QuranAudioController extends Notifier<QuranAudioState> {
   StreamSubscription<AudioPlayerState>? _audioStateSubscription;
   bool _isTransitioningTrack = false;
-
-  /// Timestamp when the current loading phase started.
-  /// Used to enforce a minimum visual loading duration so the spinner
-  /// is always visible (even for fast local files).
-  DateTime? _loadingStartedAt;
-  static const _minLoadingDuration = Duration(milliseconds: 300);
 
   @override
   QuranAudioState build() {
@@ -61,6 +56,8 @@ class QuranAudioController extends Notifier<QuranAudioState> {
     final handler = ref.read(quranAudioHandlerProvider);
     handler.onSkipNext = () async => playNextAyah();
     handler.onSkipPrevious = () async => playPreviousAyah();
+    handler.onPlay = () async => resume();
+    handler.onPause = () async => pause();
 
     final repo = ref.read(reciterRepositoryProvider);
     final prefs = ref.read(preferencesServiceProvider);
@@ -124,7 +121,6 @@ class QuranAudioController extends Notifier<QuranAudioState> {
       // Do NOT trigger continuous auto-play if stream is in error state!
       if (playerState.status == AudioStatus.error) {
         _isTransitioningTrack = false;
-        _loadingStartedAt = null;
         state = state.copyWith(
           status: AudioStatus.error,
           errorMessage: playerState.errorMessage ?? 'خطا در پخش صوت',
@@ -132,26 +128,29 @@ class QuranAudioController extends Notifier<QuranAudioState> {
         return;
       }
 
+      // ── Completion detection (evaluated before transition guard so it is NEVER swallowed) ──
+      final dur = playerState.duration;
+      final pos = playerState.position;
+      final remaining = dur - pos;
+      final isNearOrAtEnd = dur > const Duration(seconds: 1) &&
+          (pos >= dur || (remaining <= const Duration(milliseconds: 250) && remaining >= Duration.zero));
+      final isFinished = (playerState.status == AudioStatus.completed || isNearOrAtEnd) &&
+          playerState.status != AudioStatus.loading;
+
+      if (isFinished && !_isHandlingCompletion) {
+        _isTransitioningTrack = false;
+        state = state.copyWith(
+          status: AudioStatus.completed,
+          position: playerState.duration,
+        );
+        _onTrackCompleted();
+        return;
+      }
+
       // ── While transitioning between tracks, suppress intermediate states
       if (_isTransitioningTrack) {
-        if (playerState.status == AudioStatus.playing) {
-          // Track loaded & started — enforce minimum visual loading duration
-          if (_loadingStartedAt != null) {
-            final elapsed = DateTime.now().difference(_loadingStartedAt!);
-            final remaining = _minLoadingDuration - elapsed;
-            if (remaining > Duration.zero) {
-              Future.delayed(remaining, () {
-                _isTransitioningTrack = false;
-                _loadingStartedAt = null;
-                if (state.status == AudioStatus.loading) {
-                  state = state.copyWith(status: AudioStatus.playing);
-                }
-              });
-              return;
-            }
-          }
+        if (playerState.status == AudioStatus.playing || playerState.position > Duration.zero) {
           _isTransitioningTrack = false;
-          _loadingStartedAt = null;
           state = state.copyWith(
             status: AudioStatus.playing,
             position: playerState.position,
@@ -162,6 +161,12 @@ class QuranAudioController extends Notifier<QuranAudioState> {
                 .read(activeAyahProvider.notifier)
                 .setActiveAyah(state.currentAyahNumber);
           }
+        } else if (playerState.status == AudioStatus.error) {
+          _isTransitioningTrack = false;
+          state = state.copyWith(
+            status: AudioStatus.error,
+            errorMessage: playerState.errorMessage ?? 'خطا در بارگذاری صوت',
+          );
         }
         return;
       }
@@ -180,11 +185,6 @@ class QuranAudioController extends Notifier<QuranAudioState> {
             .read(activeAyahProvider.notifier)
             .setActiveAyah(state.currentAyahNumber);
       }
-
-      // End of track — handle mode sequence transitions
-      if (playerState.status == AudioStatus.completed) {
-        _onTrackCompleted();
-      }
     });
   }
 
@@ -199,78 +199,94 @@ class QuranAudioController extends Notifier<QuranAudioState> {
     }
   }
 
+  bool _isHandlingCompletion = false;
+
   Future<void> _onTrackCompleted() async {
-    final currentAyah = state.currentAyahNumber;
-    final surahId = state.currentSurahId;
-    final totalAyahs = state.totalAyahsInSurah;
-    final mode = state.playbackMode;
-    final trackType = state.currentTrackType;
+    if (_isHandlingCompletion) return;
+    _isHandlingCompletion = true;
 
-    if (currentAyah == null || surahId == null || totalAyahs == null) {
-      await stop();
-      return;
-    }
+    try {
+      final currentAyah = state.currentAyahNumber;
+      final surahId = state.currentSurahId;
+      final totalAyahs = state.totalAyahsInSurah ??
+          (surahId != null && surahId >= 1 && surahId <= 114
+              ? kStaticQuranSurahs[surahId - 1].numberOfAyahs
+              : null);
+      final mode = state.playbackMode;
+      final trackType = state.currentTrackType;
 
-    switch (mode) {
-      case AudioPlaybackMode.onlyQuran:
-        await _advanceNextAyah(
-          surahId: surahId,
-          currentAyah: currentAyah,
-          totalAyahs: totalAyahs,
-          targetTrack: CurrentTrackType.quran,
-        );
-        break;
+      debugPrint(
+        '🎵 [_onTrackCompleted] surah: $surahId, ayah: $currentAyah / $totalAyahs, mode: $mode, isAutoPlayNext: ${state.isAutoPlayNext}',
+      );
 
-      case AudioPlaybackMode.onlyTranslation:
-        await _advanceNextAyah(
-          surahId: surahId,
-          currentAyah: currentAyah,
-          totalAyahs: totalAyahs,
-          targetTrack: CurrentTrackType.translation,
-        );
-        break;
+      if (currentAyah == null || surahId == null || totalAyahs == null) {
+        await stop();
+        return;
+      }
 
-      case AudioPlaybackMode.quranThenTranslation:
-        if (trackType == CurrentTrackType.quran) {
-          // Play translation for SAME ayah
-          await _playTrack(
-            surahId: surahId,
-            ayahNumber: currentAyah,
-            totalAyahsInSurah: totalAyahs,
-            trackType: CurrentTrackType.translation,
-            isSingleAyahMode: state.isSingleAyahMode,
-          );
-        } else {
-          // Finished translation -> Move to next ayah, play quran
+      switch (mode) {
+        case AudioPlaybackMode.onlyQuran:
           await _advanceNextAyah(
             surahId: surahId,
             currentAyah: currentAyah,
             totalAyahs: totalAyahs,
             targetTrack: CurrentTrackType.quran,
           );
-        }
-        break;
+          break;
 
-      case AudioPlaybackMode.translationThenQuran:
-        if (trackType == CurrentTrackType.translation) {
-          // Play quran for SAME ayah
-          await _playTrack(
-            surahId: surahId,
-            ayahNumber: currentAyah,
-            totalAyahsInSurah: totalAyahs,
-            trackType: CurrentTrackType.quran,
-            isSingleAyahMode: state.isSingleAyahMode,
-          );
-        } else {
-          // Finished quran -> Move to next ayah, play translation
+        case AudioPlaybackMode.onlyTranslation:
           await _advanceNextAyah(
             surahId: surahId,
             currentAyah: currentAyah,
             totalAyahs: totalAyahs,
             targetTrack: CurrentTrackType.translation,
           );
-        }
-        break;
+          break;
+
+        case AudioPlaybackMode.quranThenTranslation:
+          if (trackType == CurrentTrackType.quran) {
+            // Play translation for SAME ayah
+            await _playTrack(
+              surahId: surahId,
+              ayahNumber: currentAyah,
+              totalAyahsInSurah: totalAyahs,
+              trackType: CurrentTrackType.translation,
+              isSingleAyahMode: state.isSingleAyahMode,
+            );
+          } else {
+            // Finished translation -> Move to next ayah, play quran
+            await _advanceNextAyah(
+              surahId: surahId,
+              currentAyah: currentAyah,
+              totalAyahs: totalAyahs,
+              targetTrack: CurrentTrackType.quran,
+            );
+          }
+          break;
+
+        case AudioPlaybackMode.translationThenQuran:
+          if (trackType == CurrentTrackType.translation) {
+            // Play quran for SAME ayah
+            await _playTrack(
+              surahId: surahId,
+              ayahNumber: currentAyah,
+              totalAyahsInSurah: totalAyahs,
+              trackType: CurrentTrackType.quran,
+              isSingleAyahMode: state.isSingleAyahMode,
+            );
+          } else {
+            // Finished quran -> Move to next ayah, play translation
+            await _advanceNextAyah(
+              surahId: surahId,
+              currentAyah: currentAyah,
+              totalAyahs: totalAyahs,
+              targetTrack: CurrentTrackType.translation,
+            );
+          }
+          break;
+      }
+    } finally {
+      _isHandlingCompletion = false;
     }
   }
 
@@ -282,7 +298,6 @@ class QuranAudioController extends Notifier<QuranAudioState> {
   }) async {
     if (!state.isAutoPlayNext || state.isSingleAyahMode || currentAyah >= totalAyahs) {
       _isTransitioningTrack = false;
-      _loadingStartedAt = null;
       await stop();
       return;
     }
@@ -290,7 +305,6 @@ class QuranAudioController extends Notifier<QuranAudioState> {
     final nextAyah = currentAyah + 1;
     state = state.copyWith(status: AudioStatus.loading);
     _isTransitioningTrack = true;
-    _loadingStartedAt = DateTime.now();
 
     await _playTrack(
       surahId: surahId,
@@ -302,16 +316,16 @@ class QuranAudioController extends Notifier<QuranAudioState> {
   }
 
   /// Select reciter safely without stream interruption crashes
-  Future<void> selectReciter(ReciterEntity reciter) async {
+  Future<void> selectReciter(ReciterEntity reciter, {bool autoRestart = true}) async {
     if (reciter.styleId == 4) {
-      await selectTranslationReciter(reciter);
+      await selectTranslationReciter(reciter, autoRestart: autoRestart);
       return;
     }
     final isActuallyPlayingOrPaused = state.status == AudioStatus.playing || state.status == AudioStatus.loading || state.status == AudioStatus.paused;
     state = state.copyWith(selectedReciter: reciter);
     ref.read(preferencesServiceProvider).setInt('selected_reciter_id', reciter.id);
 
-    if (isActuallyPlayingOrPaused && state.currentTrackType == CurrentTrackType.quran && state.currentSurahId != null && state.currentAyahNumber != null) {
+    if (autoRestart && isActuallyPlayingOrPaused && state.currentTrackType == CurrentTrackType.quran && state.currentSurahId != null && state.currentAyahNumber != null) {
       final audioService = ref.read(audioPlayerServiceProvider);
       await audioService.stop();
       await _playTrack(
@@ -325,16 +339,16 @@ class QuranAudioController extends Notifier<QuranAudioState> {
   }
 
   /// Select translation reciter (گوینده ترجمه صوتی)
-  Future<void> selectTranslationReciter(ReciterEntity reciter) async {
+  Future<void> selectTranslationReciter(ReciterEntity reciter, {bool autoRestart = true}) async {
     if (reciter.styleId != 4) {
-      await selectReciter(reciter);
+      await selectReciter(reciter, autoRestart: autoRestart);
       return;
     }
     final isActuallyPlayingOrPaused = state.status == AudioStatus.playing || state.status == AudioStatus.loading || state.status == AudioStatus.paused;
     state = state.copyWith(selectedTranslationReciter: reciter);
     ref.read(preferencesServiceProvider).setInt('selected_translation_reciter_id', reciter.id);
 
-    if (isActuallyPlayingOrPaused && state.currentTrackType == CurrentTrackType.translation && state.currentSurahId != null && state.currentAyahNumber != null) {
+    if (autoRestart && isActuallyPlayingOrPaused && state.currentTrackType == CurrentTrackType.translation && state.currentSurahId != null && state.currentAyahNumber != null) {
       final audioService = ref.read(audioPlayerServiceProvider);
       await audioService.stop();
       await _playTrack(
@@ -372,7 +386,6 @@ class QuranAudioController extends Notifier<QuranAudioState> {
     bool isSingleAyahMode = false,
   }) async {
     _isTransitioningTrack = true;
-    _loadingStartedAt = DateTime.now();
 
     if (state.errorMessage != null) {
       state = state.copyWith(errorMessage: null);
@@ -397,7 +410,6 @@ class QuranAudioController extends Notifier<QuranAudioState> {
       );
       if (!canPlay) {
         _isTransitioningTrack = false;
-        _loadingStartedAt = null;
         state = state.copyWith(
           status: AudioStatus.stopped,
           errorMessage: 'برای شنیدن تلاوت این قاری در این سوره، اشتراک ویژه لازم است.',
@@ -408,7 +420,6 @@ class QuranAudioController extends Notifier<QuranAudioState> {
       final canPlay = AudioVipPolicy.canPlayAudioTranslation(isVip: isVip);
       if (!canPlay) {
         _isTransitioningTrack = false;
-        _loadingStartedAt = null;
         state = state.copyWith(
           status: AudioStatus.stopped,
           errorMessage: 'پخش ترجمه گویا نیازمند اشتراک ویژه است.',
@@ -459,19 +470,21 @@ class QuranAudioController extends Notifier<QuranAudioState> {
     if (localPath != null) {
       audioSourceToPlay = localPath;
     } else if (kIsWeb) {
+      // On Web, stream from server directly
       audioSourceToPlay = AudioUrlHelper.buildAyahUrl(
         subfolder: activeReciter.subfolder,
         surahNumber: surahId,
         ayahNumber: ayahNumber,
       );
     } else {
+      // On Android/iOS/Desktop: file not downloaded → stop gracefully
       _isTransitioningTrack = false;
-      await stop();
-      final errorPrefix = trackType == CurrentTrackType.translation
-          ? 'صوت ترجمه آیه $ayahNumber'
-          : 'صوت آیه $ayahNumber';
+      final trackLabel = trackType == CurrentTrackType.translation
+          ? 'ترجمه گویا'
+          : 'تلاوت';
       state = state.copyWith(
-        errorMessage: '$errorPrefix دانلود نشده است. لطفاً ابتدا دانلود کنید.',
+        status: AudioStatus.stopped,
+        errorMessage: 'فایل صوتی $trackLabel برای این آیه دانلود نشده است. لطفاً ابتدا دانلود کنید.',
         lastAttemptedAyahNumber: ayahNumber,
       );
       return;
@@ -602,37 +615,64 @@ class QuranAudioController extends Notifier<QuranAudioState> {
   /// Play next ayah automatically or manually
   Future<void> playNextAyah() async {
     final currentAyah = state.currentAyahNumber;
-    final totalAyahs = state.totalAyahsInSurah;
-    final surahId = state.currentSurahId;
+    final totalAyahs = state.totalAyahsInSurah ?? 7;
+    final surahId = state.currentSurahId ?? 1;
 
-    if (currentAyah != null && totalAyahs != null && surahId != null) {
-      if (currentAyah < totalAyahs) {
-        final nextAyah = currentAyah + 1;
-        final initialTrack = _getInitialTrackType(state.playbackMode);
-        await _playTrack(
-          surahId: surahId,
-          ayahNumber: nextAyah,
-          totalAyahsInSurah: totalAyahs,
-          trackType: initialTrack,
-        );
-      } else {
-        _isTransitioningTrack = false;
-        _loadingStartedAt = null;
-        stop();
-      }
+    final startAyah = currentAyah ?? 0;
+    if (startAyah < totalAyahs) {
+      final nextAyah = startAyah + 1;
+      final initialTrack = _getInitialTrackType(state.playbackMode);
+      await _playTrack(
+        surahId: surahId,
+        ayahNumber: nextAyah,
+        totalAyahsInSurah: totalAyahs,
+        trackType: initialTrack,
+      );
+    } else {
+      _isTransitioningTrack = false;
+      stop();
     }
   }
 
   /// Pause audio
   Future<void> pause() async {
     _isTransitioningTrack = false;
-    _loadingStartedAt = null;
     final audioService = ref.read(audioPlayerServiceProvider);
     await audioService.pause();
   }
 
-  /// Resume audio
+  /// Resume audio, or advance/replay if completed, stopped, or error
   Future<void> resume() async {
+    final dur = state.duration;
+    final pos = state.position;
+    final remaining = dur - pos;
+    final isAtEnd = dur > const Duration(seconds: 1) &&
+        (pos >= dur || (remaining <= const Duration(milliseconds: 250) && remaining >= Duration.zero));
+    final isCompleted = state.status == AudioStatus.completed || isAtEnd;
+    final isStopped = state.status == AudioStatus.stopped || state.status == AudioStatus.initial;
+    final isError = state.status == AudioStatus.error;
+
+    if (isCompleted || isStopped || isError) {
+      clearError();
+      final surahId = state.currentSurahId ?? 1;
+      final currentAyah = state.currentAyahNumber ?? 1;
+      final totalAyahs = state.totalAyahsInSurah ??
+          (surahId >= 1 && surahId <= 114
+              ? kStaticQuranSurahs[surahId - 1].numberOfAyahs
+              : 7);
+
+      final targetAyah = isCompleted
+          ? (currentAyah < totalAyahs ? currentAyah + 1 : 1)
+          : currentAyah;
+
+      await playAyah(
+        surahId: surahId,
+        ayahNumber: targetAyah,
+        totalAyahsInSurah: totalAyahs,
+      );
+      return;
+    }
+
     final audioService = ref.read(audioPlayerServiceProvider);
     await audioService.resume();
   }
@@ -640,7 +680,6 @@ class QuranAudioController extends Notifier<QuranAudioState> {
   /// Stop audio
   Future<void> stop() async {
     _isTransitioningTrack = false;
-    _loadingStartedAt = null;
     final audioService = ref.read(audioPlayerServiceProvider);
     await audioService.stop();
     

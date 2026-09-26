@@ -1,7 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quran/features/subscription/domain/models/vip_subscription_state.dart';
 import 'package:quran/features/subscription/domain/policy/translation_vip_policy.dart';
 
 void main() {
+  setUp(() {
+    VipSubscriptionState.isAllFeaturesFree = false;
+  });
+
+  tearDown(() {
+    VipSubscriptionState.isAllFeaturesFree = true;
+  });
+
   group('TranslationVipPolicy Tests', () {
     test('Default database translation (fa.makarem) should be 100% free for non-VIP', () {
       expect(TranslationVipPolicy.isTranslationFree('fa.makarem'), isTrue);

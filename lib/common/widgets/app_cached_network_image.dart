@@ -1,9 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// A reusable, cached network image component wrapping [CachedNetworkImage]
-/// with standardized loading shimmer/indicator and graceful error/placeholder icon fallback states.
+/// on native platforms and [Image.network] on Web with standardized loading
+/// shimmer/indicator and graceful error/placeholder icon fallback states.
 class AppCachedNetworkImage extends StatelessWidget {
   final String? imageUrl;
   final double? width;
@@ -63,6 +65,14 @@ class AppCachedNetworkImage extends StatelessWidget {
           color: bgColor,
           shape: shape,
           borderRadius: shape == BoxShape.circle ? null : borderRadius,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              bgColor,
+              colorScheme.primaryContainer.withValues(alpha: 0.35),
+            ],
+          ),
         ),
         alignment: Alignment.center,
         child: fallbackIcon != null
@@ -88,41 +98,65 @@ class AppCachedNetworkImage extends StatelessWidget {
       return buildErrorFallback();
     }
 
+    Widget buildPlaceholder() {
+      return Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: bgColor,
+          shape: shape,
+          borderRadius: shape == BoxShape.circle ? null : borderRadius,
+        ),
+        child: Center(
+          child: SizedBox(
+            width: (height != null) ? height! * 0.35 : 16.0,
+            height: (height != null) ? height! * 0.35 : 16.0,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: fallbackColor,
+            ),
+          ),
+        ),
+      );
+    }
+
     final Widget imageWidget;
-    if (imageUrl!.startsWith('assets/')) {
+    final cleanUrl = imageUrl!.trim();
+
+    if (cleanUrl.startsWith('assets/')) {
       imageWidget = Image.asset(
-        imageUrl!,
+        cleanUrl,
         width: width,
         height: height,
         fit: fit,
         errorBuilder: (context, error, stackTrace) => buildErrorFallback(),
       );
-    } else {
-      imageWidget = CachedNetworkImage(
-        imageUrl: imageUrl!,
+    } else if (kIsWeb) {
+      // On Web, Image.network uses browser native image decoding which bypasses CORS/XHR restrictions
+      imageWidget = Image.network(
+        cleanUrl,
         width: width,
         height: height,
         fit: fit,
-        placeholder: placeholder ??
-            (context, url) => Container(
-                  width: width,
-                  height: height,
-                  decoration: BoxDecoration(
-                    color: bgColor,
-                    shape: shape,
-                    borderRadius: shape == BoxShape.circle ? null : borderRadius,
-                  ),
-                  child: Center(
-                    child: SizedBox(
-                      width: (height != null) ? height! * 0.35 : 16.0,
-                      height: (height != null) ? height! * 0.35 : 16.0,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        color: fallbackColor,
-                      ),
-                    ),
-                  ),
-                ),
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          if (placeholder != null) return placeholder!(context, cleanUrl);
+          return buildPlaceholder();
+        },
+        errorBuilder: (context, error, stackTrace) {
+          if (errorWidget != null) {
+            return errorWidget!(context, cleanUrl, error);
+          }
+          return buildErrorFallback();
+        },
+      );
+    } else {
+      imageWidget = CachedNetworkImage(
+        imageUrl: cleanUrl,
+        width: width,
+        height: height,
+        fit: fit,
+        placeholder: placeholder ?? (context, url) => buildPlaceholder(),
         errorWidget: errorWidget ??
             (context, url, error) => buildErrorFallback(),
       );
