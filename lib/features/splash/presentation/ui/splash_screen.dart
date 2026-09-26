@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../common/constants/app_constants.dart';
@@ -113,49 +114,85 @@ class _SplashScreenState extends State<SplashScreen>
                       scale: _scaleAnimation,
                       child: SlideTransition(
                         position: _slideAnimation,
-                        child: AnimatedBuilder(
-                          animation: _shimmerController,
-                          builder: (context, child) {
-                            return ShaderMask(
-                              blendMode: BlendMode.srcATop,
-                              shaderCallback: (bounds) {
-                                return LinearGradient(
-                                  begin: Alignment(_shimmerAnimation.value - 1.0, 0),
-                                  end: Alignment(_shimmerAnimation.value, 0),
-                                  colors: const [
-                                    Color(0xFF0A3C30), // Deep Royal Emerald
-                                    Color(0xFF0A3C30),
-                                    Color(0xFFC5A059), // Radiant Gold Sheen
-                                    Color(0xFF0A3C30),
-                                    Color(0xFF0A3C30),
-                                  ],
-                                  stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
-                                ).createShader(bounds);
-                              },
-                              child: Text(
-                                AppConstants.appTitle,
-                                style: AppTypography.splashAppTitle.copyWith(
-                                  color: const Color(0xFF0A3C30),
-                                  fontSize: 40,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                  shadows: [
-                                    Shadow(
-                                      color: const Color(0xFF0A3C30).withValues(alpha: 0.20),
-                                      blurRadius: 18,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                    Shadow(
-                                      color: Colors.white.withValues(alpha: 0.9),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 0),
-                                    ),
-                                  ],
-                                ),
-                                textAlign: TextAlign.center,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(32),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 44,
+                                vertical: 22,
                               ),
-                            );
-                          },
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(32),
+                                gradient: RadialGradient(
+                                  radius: 1.15,
+                                  colors: [
+                                    Colors.white.withValues(alpha: 0.95), // White in center
+                                    Colors.white.withValues(alpha: 0.85),
+                                    Colors.white.withValues(alpha: 0.45),
+                                    Colors.white.withValues(alpha: 0.08), // Fades to transparent at edges
+                                  ],
+                                  stops: const [0.0, 0.45, 0.80, 1.0],
+                                ),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.55),
+                                  width: 1.2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                    blurRadius: 32,
+                                    spreadRadius: 6,
+                                  ),
+                                  BoxShadow(
+                                    color: const Color(0xFF0A3C30).withValues(alpha: 0.06),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              child: AnimatedBuilder(
+                                animation: _shimmerController,
+                                builder: (context, child) {
+                                  return ShaderMask(
+                                    blendMode: BlendMode.srcATop,
+                                    shaderCallback: (bounds) {
+                                      return LinearGradient(
+                                        begin: Alignment(_shimmerAnimation.value - 1.0, 0),
+                                        end: Alignment(_shimmerAnimation.value, 0),
+                                        colors: const [
+                                          Color(0xFF0A3C30), // Deep Royal Emerald
+                                          Color(0xFF0A3C30),
+                                          Color(0xFFC5A059), // Radiant Gold Sheen
+                                          Color(0xFF0A3C30),
+                                          Color(0xFF0A3C30),
+                                        ],
+                                        stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
+                                      ).createShader(bounds);
+                                    },
+                                    child: Text(
+                                      AppConstants.appTitle,
+                                      style: AppTypography.splashAppTitle.copyWith(
+                                        color: const Color(0xFF0A3C30),
+                                        fontSize: 40,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                        shadows: [
+                                          Shadow(
+                                            color: const Color(0xFF0A3C30).withValues(alpha: 0.15),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 3),
+                                          ),
+                                        ],
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
