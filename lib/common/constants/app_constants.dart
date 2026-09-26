@@ -6,6 +6,7 @@ abstract class AppConstants {
 
   // Assets Paths
   static const String ayahCardBgAsset = 'assets/images/ayah_card_bg.png';
+  static const String splashBgAsset = 'assets/images/splash_bg.jpg';
 
   // Network Error Messages - Connection Types
   static const String connectionTimeoutError =

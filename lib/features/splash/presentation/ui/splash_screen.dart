@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../common/constants/app_constants.dart';
-import '../../../../common/extensions/context_extension.dart';
 import '../../../../core/routes/route_name.dart';
 import '../../../../core/theme/app_typography.dart';
 
@@ -77,97 +76,117 @@ class _SplashScreenState extends State<SplashScreen>
     if (mounted) {
       try {
         precacheImage(const AssetImage(AppConstants.ayahCardBgAsset), context);
+        precacheImage(const AssetImage(AppConstants.splashBgAsset), context);
       } catch (_) {}
     }
 
-    // Delay reduced from 2600ms to 400ms to make app start extremely fast
-    await Future.delayed(const Duration(milliseconds: 400));
+    await Future.delayed(const Duration(milliseconds: 1400));
     if (mounted) {
-      context.goNamed(mainNavigationRoute);
+      try {
+        context.goNamed(mainNavigationRoute);
+      } catch (_) {}
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0F5A47), // Emerald Green
-              Color(0xFF072B22), // Deep Dark Emerald
-              Color(0xFF020E0B), // Deepest Emerald Black
-            ],
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Calligraphy Background Image
+          Image.asset(
+            AppConstants.splashBgAsset,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
           ),
-        ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              Center(
-                child: FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: ScaleTransition(
-                    scale: _scaleAnimation,
-                    child: SlideTransition(
-                      position: _slideAnimation,
-                      child: AnimatedBuilder(
-                        animation: _shimmerController,
-                        builder: (context, child) {
-                          return ShaderMask(
-                            blendMode: BlendMode.srcATop,
-                            shaderCallback: (bounds) {
-                              return LinearGradient(
-                                begin: Alignment(_shimmerAnimation.value - 1.0, 0),
-                                end: Alignment(_shimmerAnimation.value, 0),
-                                colors: [
-                                  context.colors.goldAccent,
-                                  context.colors.goldAccent.withValues(alpha: 0.85),
-                                  const Color(0xFFFFF6D6), // Radiant High Gold Light
-                                  context.colors.goldAccent.withValues(alpha: 0.85),
-                                  context.colors.goldAccent,
-                                ],
-                                stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
-                              ).createShader(bounds);
-                            },
-                            child: Text(
-                              AppConstants.appTitle,
-                              style: AppTypography.splashAppTitle,
-                              textAlign: TextAlign.center,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-              ),
 
-              // Minimal Gold Progress Indicator at Bottom
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 36,
-                child: Center(
+          SafeArea(
+            child: Stack(
+              children: [
+                Center(
                   child: FadeTransition(
                     opacity: _fadeAnimation,
-                    child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.0,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          context.colors.goldAccent.withValues(alpha: 0.85),
+                    child: ScaleTransition(
+                      scale: _scaleAnimation,
+                      child: SlideTransition(
+                        position: _slideAnimation,
+                        child: AnimatedBuilder(
+                          animation: _shimmerController,
+                          builder: (context, child) {
+                            return ShaderMask(
+                              blendMode: BlendMode.srcATop,
+                              shaderCallback: (bounds) {
+                                return LinearGradient(
+                                  begin: Alignment(_shimmerAnimation.value - 1.0, 0),
+                                  end: Alignment(_shimmerAnimation.value, 0),
+                                  colors: const [
+                                    Color(0xFF0A3C30), // Deep Royal Emerald
+                                    Color(0xFF0A3C30),
+                                    Color(0xFFC5A059), // Radiant Gold Sheen
+                                    Color(0xFF0A3C30),
+                                    Color(0xFF0A3C30),
+                                  ],
+                                  stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
+                                ).createShader(bounds);
+                              },
+                              child: Text(
+                                AppConstants.appTitle,
+                                style: AppTypography.splashAppTitle.copyWith(
+                                  color: const Color(0xFF0A3C30),
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                  shadows: [
+                                    Shadow(
+                                      color: const Color(0xFF0A3C30).withValues(alpha: 0.20),
+                                      blurRadius: 18,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                    Shadow(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 0),
+                                    ),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+
+                // Progress Indicator at Bottom
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 36,
+                  child: Center(
+                    child: FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF0F5A47),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
