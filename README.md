@@ -1,17 +1,11 @@
-# quran
+# quran-tafakor
 
-A new Flutter project.
+نرم‌افزار جامع قرآنی قرآن تفکر (Quran Tafakor) توسعه‌یافته با Flutter.
 
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## قابلیت‌ها
+- قرائت و تلاوت صوتی آیات با قاریان متعدد
+- تفسیر جامع قرآن کریم (تفسیر نمونه، تفسیر نور، المیزان)
+- ترجمه‌های معتبر فارسی
+- لغت‌نامه و ترجمه کلمه به کلمه آیات
+- نشانه‌گذاری و ذخیره آخرین محل مطالعه
+- پشتیبانی کامل از وب، اندروید و طراحی واکنش‌گرا
