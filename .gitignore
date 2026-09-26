@@ -18,10 +18,7 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+.vscode/
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -62,7 +59,8 @@ adhami.txt
 package-lock.json
 .package-lock.json
 
-# Scratch, firmware & temporary designs
+# Development scripts, firmware & temporary designs
+/scripts/
 /scratch/
 /prototype/
 /firmware/
