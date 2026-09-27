@@ -30,7 +30,8 @@ import '../widgets/surah_ayah_page_view.dart';
 import '../widgets/word_by_word_bottom_sheet.dart';
 import '../../domain/entities/ayah_theme_entity.dart';
 import '../../../bookmarks/application/controllers/bookmarks_controller.dart';
-import '../../../../common/extensions/int_extension.dart';
+import '../../../quick_access/presentation/widgets/bookmarks_manager_bottom_sheet.dart';
+import '../../../bookmarks/presentation/widgets/ayah_bookmark_editor_bottom_sheet.dart';
 import '../../../../common/extensions/surah_name_extension.dart';
 import '../../../quran_home/application/controllers/continue_reading_controller.dart';
 
@@ -567,42 +568,49 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                 );
                               }
                             },
-                             onBookmarkPressed: () async {
+                             onBookmarkPressed: () {
                                final currentSelected = ref.read(selectedAyahActionProvider);
                                final currentState = ref.read(continueReadingControllerProvider);
-                               final ayahNum = currentSelected.isNotEmpty
+                               final allAyahs = ref.read(quranReaderControllerProvider).ayahs;
+                               final hasSelection = currentSelected.isNotEmpty;
+                               final ayahNum = hasSelection
                                    ? currentSelected.first
                                    : (currentState?.surahId == currentSurahId
                                        ? currentState?.ayahNumber ?? 1
                                        : 1);
-                               final totalAyahs = (currentState?.surahId == currentSurahId)
-                                   ? currentState?.totalAyahs ?? 0
-                                   : 0;
+                               final totalAyahs = (currentState?.surahId == currentSurahId && (currentState?.totalAyahs ?? 0) > 0)
+                                   ? currentState!.totalAyahs
+                                   : allAyahs.length;
+                               final ayahEntity = allAyahs.where((a) => a.ayahNumber == ayahNum).firstOrNull;
+                               final existingBookmark = ref.read(bookmarksControllerProvider).where(
+                                     (b) => b.surahId == currentSurahId && b.ayahNumber == ayahNum,
+                                   ).firstOrNull;
 
-                               final isAdded = await ref
-                                   .read(bookmarksControllerProvider.notifier)
-                                   .toggleBookmark(
-                                     surahId: currentSurahId,
-                                     surahName: currentSurahName,
-                                     ayahNumber: ayahNum,
-                                     totalAyahs: totalAyahs,
-                                   );
+                               if (hasSelection) {
+                                 ref.read(selectedAyahActionProvider.notifier).clearSelection();
+                               }
+
+                               // If bookmarked from the reader header during normal reading without selection,
+                               // it is a page/reading bookmark (isAyahBookmark: false) so it appears under 'نشانک صفحه'.
+                               // If an ayah is explicitly selected, it is an ayah bookmark (isAyahBookmark: true).
+                               // If it already exists, preserve its existing type.
+                               final isAyahBookmark = existingBookmark != null
+                                   ? existingBookmark.isAyahBookmark
+                                   : hasSelection;
 
                                HapticFeedback.lightImpact();
-                               if (context.mounted) {
-                                 if (isAdded) {
-                                   AppSnackBar.showSuccess(
-                                     context,
-                                     'آیه ${ayahNum.toPersianDigit()} سوره $currentSurahName به نشانه‌ها افزوده شد.',
-                                   );
-                                 } else {
-                                   AppSnackBar.showInfo(
-                                     context,
-                                     'نشانک آیه ${ayahNum.toPersianDigit()} سوره $currentSurahName حذف شد.',
-                                     duration: const Duration(seconds: 2),
-                                   );
-                                 }
-                               }
+                               AyahBookmarkEditorBottomSheet.show(
+                                 context,
+                                 surahId: currentSurahId,
+                                 surahName: currentSurahName,
+                                 ayahNumber: ayahNum,
+                                 totalAyahs: totalAyahs,
+                                 arabicText: ayahEntity?.arabicText,
+                                 initialNote: existingBookmark?.note,
+                                 initialLabelIds: existingBookmark?.labelIds ?? const [],
+                                 isAlreadyBookmarked: existingBookmark != null,
+                                 isAyahBookmark: isAyahBookmark,
+                               );
                              },
                              onMenuSelected: (value) {
                                if (value == 'fullscreen') {
@@ -613,6 +621,8 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                  }
                                } else if (value == 'settings') {
                                  QuickSettingsDrawer.show(context);
+                               } else if (value == 'bookmarks') {
+                                 BookmarksManagerBottomSheet.show(context);
                                } else if (value == 'toggle_brackets') {
                                  final current = ref.read(quranDisplaySettingsControllerProvider).removeTranslationBrackets;
                                  final notifier = ref.read(quranDisplaySettingsControllerProvider.notifier);
@@ -633,6 +643,23 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                        SizedBox(width: 8),
                                        Text(
                                          'تنظیمات نمایش',
+                                         style: TextStyle(
+                                           fontFamily: AppTypography.fontFamily,
+                                           fontSize: 13,
+                                         ),
+                                       ),
+                                     ],
+                                   ),
+                                 ),
+                                 const PopupMenuItem<String>(
+                                   value: 'bookmarks',
+                                   child: Row(
+                                     mainAxisSize: MainAxisSize.min,
+                                     children: [
+                                       Icon(CupertinoIcons.bookmark, size: 18),
+                                       SizedBox(width: 8),
+                                       Text(
+                                         'نشان‌شده‌ها',
                                          style: TextStyle(
                                            fontFamily: AppTypography.fontFamily,
                                            fontSize: 13,

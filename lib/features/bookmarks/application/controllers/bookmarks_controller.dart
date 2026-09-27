@@ -35,6 +35,8 @@ class BookmarksController extends Notifier<List<BookmarkItem>> {
     required int totalAyahs,
     String? arabicText,
     bool isAyahBookmark = false,
+    List<String> labelIds = const [],
+    String? note,
   }) async {
     final existingIndex = state.indexWhere(
       (b) => b.surahId == surahId && b.ayahNumber == ayahNumber,
@@ -58,12 +60,139 @@ class BookmarksController extends Notifier<List<BookmarkItem>> {
         createdAt: DateTime.now().millisecondsSinceEpoch,
         arabicText: arabicText,
         isAyahBookmark: isAyahBookmark,
+        labelIds: labelIds,
+        note: note,
       );
 
       await _dataSource.saveBookmark(newItem);
       state = [newItem, ...state];
       return true;
     }
+  }
+
+  /// Saves a new bookmark or updates an existing bookmark with note and labels.
+  Future<void> saveOrUpdateAyahBookmark({
+    required int surahId,
+    required String surahName,
+    required int ayahNumber,
+    required int totalAyahs,
+    String? arabicText,
+    List<String> labelIds = const [],
+    String? note,
+    bool isAyahBookmark = true,
+  }) async {
+    final existingIndex = state.indexWhere(
+      (b) => b.surahId == surahId && b.ayahNumber == ayahNumber,
+    );
+
+    final trimmedNote = note?.trim();
+    final cleanNote = (trimmedNote != null && trimmedNote.isNotEmpty) ? trimmedNote : null;
+
+    if (existingIndex != -1) {
+      final existing = state[existingIndex];
+      final updated = existing.copyWith(
+        surahName: surahName.isNotEmpty ? surahName : existing.surahName,
+        arabicText: arabicText ?? existing.arabicText,
+        isAyahBookmark: isAyahBookmark,
+        labelIds: labelIds,
+        note: cleanNote,
+        clearNote: cleanNote == null,
+      );
+      await _dataSource.saveBookmark(updated);
+      state = [
+        ...state.sublist(0, existingIndex),
+        updated,
+        ...state.sublist(existingIndex + 1),
+      ];
+    } else {
+      final newItem = BookmarkItem(
+        surahId: surahId,
+        surahName: surahName,
+        ayahNumber: ayahNumber,
+        totalAyahs: totalAyahs,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        arabicText: arabicText,
+        isAyahBookmark: isAyahBookmark,
+        labelIds: labelIds,
+        note: cleanNote,
+      );
+      await _dataSource.saveBookmark(newItem);
+      state = [newItem, ...state];
+    }
+  }
+
+  /// Updates or removes personal note for a specific bookmarked Ayah.
+  Future<void> updateBookmarkNote({
+    required int surahId,
+    required int ayahNumber,
+    String? note,
+  }) async {
+    final index = state.indexWhere(
+      (b) => b.surahId == surahId && b.ayahNumber == ayahNumber,
+    );
+    if (index == -1) return;
+
+    final trimmed = note?.trim();
+    final updated = state[index].copyWith(
+      note: (trimmed != null && trimmed.isNotEmpty) ? trimmed : null,
+      clearNote: trimmed == null || trimmed.isEmpty,
+    );
+
+    await _dataSource.saveBookmark(updated);
+    state = [
+      ...state.sublist(0, index),
+      updated,
+      ...state.sublist(index + 1),
+    ];
+  }
+
+  /// Updates labels for a specific bookmarked Ayah.
+  Future<void> updateBookmarkLabels({
+    required int surahId,
+    required int ayahNumber,
+    required List<String> labelIds,
+  }) async {
+    final index = state.indexWhere(
+      (b) => b.surahId == surahId && b.ayahNumber == ayahNumber,
+    );
+    if (index == -1) return;
+
+    final updated = state[index].copyWith(labelIds: labelIds);
+    await _dataSource.saveBookmark(updated);
+    state = [
+      ...state.sublist(0, index),
+      updated,
+      ...state.sublist(index + 1),
+    ];
+  }
+
+  /// Removes a labelId reference from all active bookmarks (e.g. when a label is deleted).
+  Future<void> removeLabelFromAllBookmarks(String labelId) async {
+    final updatedList = <BookmarkItem>[];
+    bool hasChanged = false;
+
+    for (final item in state) {
+      if (item.labelIds.contains(labelId)) {
+        final newLabels = item.labelIds.where((id) => id != labelId).toList();
+        final updated = item.copyWith(labelIds: newLabels);
+        await _dataSource.saveBookmark(updated);
+        updatedList.add(updated);
+        hasChanged = true;
+      } else {
+        updatedList.add(item);
+      }
+    }
+
+    if (hasChanged) {
+      state = updatedList;
+    }
+  }
+
+  /// Gets a bookmark by surah ID and ayah number, or null if not found.
+  BookmarkItem? getBookmark(int surahId, int ayahNumber) {
+    return state.where(
+      (b) => b.surahId == surahId && b.ayahNumber == ayahNumber,
+    ).firstOrNull;
   }
 
   /// Removes a single bookmark by surah ID and ayah number.

@@ -10,6 +10,7 @@ import '../../../../common/extensions/string_extension.dart';
 import '../../../../common/widgets/app_modal_header.dart';
 import '../../../../core/routes/route_name.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../bookmarks/presentation/widgets/manage_labels_bottom_sheet.dart';
 import '../../../main_navigation/application/tab_navigation_controller.dart';
 import '../../../quran_reader/presentation/widgets/quick_settings_drawer.dart';
 import '../../../subscription/application/vip_subscription_controller.dart';
@@ -181,7 +182,23 @@ class SettingsScreen extends ConsumerWidget {
           ),
           18.vSpace,
 
-          // Section 3: App Information (No icon, uniform styling)
+          // Section 3: Labels Management
+          _buildSectionHeader('برچسب‌ها', isDark),
+          6.vSpace,
+          _buildGroupCard(
+            context: context,
+            children: [
+              _buildSettingsTile(
+                context: context,
+                title: 'مدیریت برچسب‌ها',
+                subtitle: 'ایجاد، ویرایش و حذف برچسب‌های نشانک',
+                onTap: () => ManageLabelsBottomSheet.show(context),
+              ),
+            ],
+          ),
+          18.vSpace,
+
+          // Section 4: App Information (No icon, uniform styling)
           _buildSectionHeader('اطلاعات برنامه', isDark),
           6.vSpace,
           _buildGroupCard(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../common/constants/app_constants.dart';
 import '../../../../core/routes/route_name.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -153,11 +154,11 @@ class _SplashScreenState extends State<SplashScreen>
                                         begin: Alignment(_shimmerAnimation.value - 1.0, 0),
                                         end: Alignment(_shimmerAnimation.value, 0),
                                         colors: const [
-                                          Color(0xFF0A3C30), // Deep Royal Emerald
-                                          Color(0xFF0A3C30),
-                                          Color(0xFFC5A059), // Radiant Gold Sheen
-                                          Color(0xFF0A3C30),
-                                          Color(0xFF0A3C30),
+                                          AppColors.primary,
+                                          AppColors.primary,
+                                          AppColors.primaryContainer,
+                                          AppColors.primary,
+                                          AppColors.primary,
                                         ],
                                         stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
                                       ).createShader(bounds);
@@ -165,13 +166,13 @@ class _SplashScreenState extends State<SplashScreen>
                                     child: Text(
                                       AppConstants.appTitle,
                                       style: AppTypography.splashAppTitle.copyWith(
-                                        color: const Color(0xFF0A3C30),
+                                        color: AppColors.primary,
                                         fontSize: 40,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: 0.5,
                                         shadows: [
                                           Shadow(
-                                            color: const Color(0xFF0A3C30).withValues(alpha: 0.15),
+                                            color: AppColors.primary.withValues(alpha: 0.15),
                                             blurRadius: 12,
                                             offset: const Offset(0, 3),
                                           ),
@@ -204,7 +205,7 @@ class _SplashScreenState extends State<SplashScreen>
                         child: CircularProgressIndicator(
                           strokeWidth: 2.2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(0xFF0F5A47),
+                            AppColors.primary,
                           ),
                         ),
                       ),

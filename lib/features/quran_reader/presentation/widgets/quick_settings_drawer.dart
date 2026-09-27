@@ -25,6 +25,7 @@ import '../utils/reciter_download_helper.dart';
 import 'ayah_number_marker.dart';
 import 'ayah_theme_carousel.dart';
 import 'tashkeel_color_selector_tile.dart';
+import '../../../quick_access/presentation/widgets/bookmarks_manager_bottom_sheet.dart';
 
 /// Ultra-modern iOS-style Tabbed Settings Bottom Sheet (Display & Audio).
 class QuickSettingsDrawer extends ConsumerStatefulWidget {
@@ -177,6 +178,20 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
                           ),
                         ),
                       ),
+                      IconButton(
+                        tooltip: 'نشانه‌های ذخیره‌شده',
+                        icon: Icon(
+                          CupertinoIcons.bookmark,
+                          size: 22,
+                          color: textPrimary,
+                        ),
+                        splashRadius: 22,
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          BookmarksManagerBottomSheet.show(context);
+                        },
+                      ),
+                      const SizedBox(width: 4),
                       const AppThemeToggleButton(),
                     ],
                   ),

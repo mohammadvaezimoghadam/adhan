@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +15,11 @@ import '../../../../core/routes/route_name.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../bookmarks/application/controllers/bookmarks_controller.dart';
+import '../../../bookmarks/application/controllers/bookmark_labels_controller.dart';
 import '../../../bookmarks/domain/entities/bookmark_item.dart';
+import '../../../bookmarks/domain/entities/bookmark_label.dart';
+import '../../../bookmarks/presentation/widgets/ayah_bookmark_editor_bottom_sheet.dart';
+import '../../../bookmarks/presentation/widgets/label_filter_chips_bar.dart';
 import '../../../quran_reader/application/controllers/quran_display_settings_controller.dart';
 
 /// Luxury bottom sheet for managing saved bookmarks with tabs for All Bookmarks and Saved Ayahs.
@@ -38,6 +43,7 @@ class BookmarksManagerBottomSheet extends ConsumerStatefulWidget {
 class _BookmarksManagerBottomSheetState
     extends ConsumerState<BookmarksManagerBottomSheet> {
   int _selectedTabIndex = 0; // 0: All, 1: Ayahs
+  String? _selectedLabelId; // null: All, 'unlabeled': without labels, or specific labelId
 
   void _navigateToAyah(BookmarkItem item) {
     Navigator.of(context).pop();
@@ -148,6 +154,7 @@ class _BookmarksManagerBottomSheetState
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bookmarks = ref.watch(bookmarksControllerProvider);
+    final labelMap = ref.watch(bookmarkLabelsMapProvider);
     final fontScript = ref.watch(
       quranDisplaySettingsControllerProvider.select((s) => s.fontScript),
     );
@@ -157,7 +164,14 @@ class _BookmarksManagerBottomSheetState
     final readingBookmarks = bookmarks.where((b) => !b.isAyahBookmark).toList();
     final ayahBookmarks = bookmarks.where((b) => b.isAyahBookmark).toList();
 
-    final currentDisplayList = _selectedTabIndex == 0 ? readingBookmarks : ayahBookmarks;
+    final baseList = _selectedTabIndex == 0 ? readingBookmarks : ayahBookmarks;
+    final currentDisplayList = _selectedLabelId == null
+        ? baseList
+        : _selectedLabelId == 'unlabeled'
+            ? baseList.where((b) => b.labelIds.isEmpty).toList()
+            : baseList
+                .where((b) => b.labelIds.contains(_selectedLabelId))
+                .toList();
 
     final colors = context.colors;
     final colorScheme = context.colorScheme;
@@ -186,7 +200,7 @@ class _BookmarksManagerBottomSheetState
         top: false,
         child: Column(
           children: [
-            // 1. Drag Handle
+            // 1. Drag Handle & Header
             AppModalHeader(
               showDragHandle: true,
               bottomSpacing: 12.0,
@@ -235,7 +249,14 @@ class _BookmarksManagerBottomSheetState
                 onTabSelected: (index) => setState(() => _selectedTabIndex = index),
               ),
             ),
-            12.vSpace,
+            8.vSpace,
+
+            // Label Filter Chips Bar
+            LabelFilterChipsBar(
+              selectedLabelId: _selectedLabelId,
+              onLabelSelected: (id) => setState(() => _selectedLabelId = id),
+            ),
+            8.vSpace,
             Divider(
               height: 1,
               thickness: 1,
@@ -264,7 +285,7 @@ class _BookmarksManagerBottomSheetState
                       separatorBuilder: (context, index) => Divider(
                         height: 1,
                         thickness: 0.6,
-                        indent: 68,
+                        indent: 16,
                         endIndent: 16,
                         color: isDark
                             ? Colors.white.withValues(alpha: 0.08)
@@ -272,17 +293,17 @@ class _BookmarksManagerBottomSheetState
                       ),
                       itemBuilder: (context, index) {
                         final item = currentDisplayList[index];
-                        final isLatest = _selectedTabIndex == 0 && index == 0;
 
                         return _buildBookmarkCard(
+                          key: ValueKey(item.key),
                           item: item,
                           index: index,
-                          isLatest: isLatest,
                           isDark: isDark,
                           cardBg: cardBg,
                           borderColor: borderColor,
                           primaryColor: primaryColor,
                           arabicFontFamily: arabicFontFamily,
+                          labelMap: labelMap,
                         );
                       },
                     ),
@@ -299,6 +320,8 @@ class _BookmarksManagerBottomSheetState
     Color primaryColor, {
     bool isAyahTab = false,
   }) {
+    final isFiltered = _selectedLabelId != null;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 40.0),
       child: Column(
@@ -306,9 +329,11 @@ class _BookmarksManagerBottomSheetState
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            isAyahTab
-                ? 'هنوز هیچ آیه‌ای نشانه‌گذاری نشده است'
-                : 'هنوز هیچ نشانه‌ای ثبت نشده است',
+            isFiltered
+                ? 'هیچ نشانه‌ای با این برچسب یافت نشد'
+                : isAyahTab
+                    ? 'هنوز هیچ آیه‌ای نشانه‌گذاری نشده است'
+                    : 'هنوز هیچ نشانه‌ای ثبت نشده است',
             style: const TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontSize: 16,
@@ -318,9 +343,11 @@ class _BookmarksManagerBottomSheetState
           ),
           8.vSpace,
           Text(
-            isAyahTab
-                ? 'با نگه‌داشتن انگشت روی هر آیه، آن را نشانه‌گذاری کنید.'
-                : 'با لمس آیکون نشانک در صفحه قرائت، صفحه را ذخیره کنید.',
+            isFiltered
+                ? 'می‌توانید با لمس آیکون برچسب روی هر نشانه، این برچسب را اضافه کنید.'
+                : isAyahTab
+                    ? 'با نگه‌داشتن انگشت روی هر آیه، آن را نشانه‌گذاری کنید.'
+                    : 'با لمس آیکون نشانک در صفحه قرائت، صفحه را ذخیره کنید.',
             style: TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontSize: 12.5,
@@ -328,7 +355,7 @@ class _BookmarksManagerBottomSheetState
               height: 1.3,
             ),
             textAlign: TextAlign.center,
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
           24.vSpace,
@@ -360,16 +387,126 @@ class _BookmarksManagerBottomSheetState
   }
 
   Widget _buildBookmarkCard({
+    Key? key,
     required BookmarkItem item,
     required int index,
-    required bool isLatest,
     required bool isDark,
     required Color cardBg,
     required Color borderColor,
     required Color primaryColor,
     required String arabicFontFamily,
+    required Map<String, BookmarkLabel> labelMap,
   }) {
-    final hasArabicSnippet = item.arabicText != null && item.arabicText!.isNotEmpty;
+    final hasArabicSnippet = item.isAyahBookmark && item.arabicText != null && item.arabicText!.isNotEmpty;
+    final hasNote = item.isAyahBookmark && item.note != null && item.note!.isNotEmpty;
+    final attachedLabels = item.labelIds
+        .map((lId) => labelMap[lId])
+        .whereType<BookmarkLabel>()
+        .toList();
+
+    Widget buildActionButtons() {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          IconButton(
+            tooltip: 'ویرایش نشانک',
+            icon: Icon(
+              hasNote
+                  ? CupertinoIcons.square_pencil_fill
+                  : CupertinoIcons.square_pencil,
+              size: 16,
+              color: hasNote
+                  ? primaryColor
+                  : (isDark ? Colors.white54 : Colors.black45),
+            ),
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(),
+            splashRadius: 16,
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              AyahBookmarkEditorBottomSheet.show(
+                context,
+                surahId: item.surahId,
+                surahName: item.surahName,
+                ayahNumber: item.ayahNumber,
+                totalAyahs: item.totalAyahs,
+                arabicText: item.arabicText,
+                initialNote: item.note,
+                initialLabelIds: item.labelIds,
+                isAlreadyBookmarked: true,
+                isAyahBookmark: item.isAyahBookmark,
+              );
+            },
+          ),
+          8.hSpace,
+          TextButton(
+            onPressed: () async {
+              HapticFeedback.lightImpact();
+              await ref
+                  .read(bookmarksControllerProvider.notifier)
+                  .removeBookmark(item.surahId, item.ayahNumber);
+              if (mounted) {
+                AppSnackBar.showInfo(
+                  context,
+                  'نشانک سوره ${item.surahId.surahNameFa} حذف شد.',
+                );
+              }
+            },
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              visualDensity: VisualDensity.compact,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: isDark ? Colors.white38 : Colors.black38,
+            ),
+            child: const Text(
+              'حذف',
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    Widget buildSurahTitleInfo({bool expanded = false}) {
+      final content = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              'سوره ${item.surahId.surahNameFa}',
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 15.5,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : const Color(0xFF1C1B1B),
+                height: 1.2,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          8.hSpace,
+          Text(
+            item.totalAyahs > 0
+                ? '• آیه ${item.ayahNumber.toPersianDigit()} از ${item.totalAyahs.toPersianDigit()}'
+                : '• آیه ${item.ayahNumber.toPersianDigit()}',
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.white60 : Colors.black54,
+            ),
+          ),
+        ],
+      );
+
+      return expanded ? Expanded(child: content) : content;
+    }
 
     return Material(
       color: Colors.transparent,
@@ -377,136 +514,139 @@ class _BookmarksManagerBottomSheetState
         onTap: () => _navigateToAyah(item),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-                // 1. Index & Badge Container (Apple Squircle)
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isLatest
-                        ? primaryColor.withValues(alpha: isDark ? 0.25 : 0.12)
-                        : (isDark ? Colors.white.withValues(alpha: 0.07) : const Color(0xFFF3F0EB)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    (index + 1).toPersianDigit(),
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: isLatest ? primaryColor : (isDark ? Colors.white70 : Colors.black87),
-                    ),
-                  ),
-                ),
-                12.hSpace,
-
-                // 2. Surah & Ayah Information
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              'سوره ${item.surahId.surahNameFa}',
-                              style: TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : const Color(0xFF1C1B1B),
-                                height: 1.2,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (isLatest) ...[
-                            6.hSpace,
-                            Text(
-                              '• آخرین نشانک',
-                              style: TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: primaryColor,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      4.vSpace,
-                      Text(
-                        item.totalAyahs > 0
-                            ? 'آیه ${item.ayahNumber.toPersianDigit()} از ${item.totalAyahs.toPersianDigit()}'
-                            : 'آیه ${item.ayahNumber.toPersianDigit()}',
-                        style: TextStyle(
-                          fontFamily: AppTypography.fontFamily,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: isDark ? Colors.white60 : Colors.black54,
-                        ),
-                      ),
-
-                      // Optional Arabic Text Preview for Ayah Bookmarks
-                      if (hasArabicSnippet) ...[
-                        6.vSpace,
-                        Directionality(
-                          textDirection: TextDirection.rtl,
-                          child: Text(
-                            item.arabicText!,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: arabicFontFamily,
-                              fontSize: 14,
-                              height: 1.6,
+              // 1. Top Row:
+              // If attachedLabels exists, top row shows [Labels] (start) | [Actions] (end).
+              // Below it is the Surah Title row.
+              // If no labels, top row shows [Surah Title] (start) | [Actions] (end).
+              if (attachedLabels.isNotEmpty) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: attachedLabels.map((label) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
                               color: isDark
-                                  ? Colors.white.withValues(alpha: 0.75)
-                                  : const Color(0xFF2C322E),
+                                  ? Colors.white.withValues(alpha: 0.04)
+                                  : const Color(0xFFF7F5F0),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.12)
+                                    : Colors.black.withValues(alpha: 0.08),
+                                width: 0.7,
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                            child: Text(
+                              label.title,
+                              style: TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? Colors.white70 : Colors.black54,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    8.hSpace,
+                    buildActionButtons(),
+                  ],
                 ),
+                6.vSpace,
+                buildSurahTitleInfo(),
+              ] else ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    buildSurahTitleInfo(expanded: true),
+                    8.hSpace,
+                    buildActionButtons(),
+                  ],
+                ),
+              ],
 
-                // 3. Delete Bookmark Button (Text only, no icons)
-                TextButton(
-                  onPressed: () async {
-                    HapticFeedback.lightImpact();
-                    await ref
-                        .read(bookmarksControllerProvider.notifier)
-                        .removeBookmark(item.surahId, item.ayahNumber);
-                    if (mounted) {
-                      AppSnackBar.showInfo(
-                        context,
-                        'نشانک سوره ${item.surahId.surahNameFa} حذف شد.',
-                      );
-                    }
-                  },
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    visualDensity: VisualDensity.compact,
-                    foregroundColor: isDark ? Colors.white38 : Colors.black38,
-                  ),
-                  child: const Text(
-                    'حذف',
+              // 3. Arabic Text Preview (for Ayah Bookmarks)
+              if (hasArabicSnippet) ...[
+                6.vSpace,
+                Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: Text(
+                    item.arabicText!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                      fontFamily: arabicFontFamily,
+                      fontSize: 15,
+                      height: 1.7,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.85)
+                          : const Color(0xFF2C322E),
                     ),
                   ),
                 ),
               ],
-            ),
+
+              // 4. Personal Note Snippet (if present, unboxed clean text)
+              if (hasNote) ...[
+                4.vSpace,
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 8.0, top: 2.0),
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      AyahBookmarkEditorBottomSheet.show(
+                        context,
+                        surahId: item.surahId,
+                        surahName: item.surahName,
+                        ayahNumber: item.ayahNumber,
+                        totalAyahs: item.totalAyahs,
+                        arabicText: item.arabicText,
+                        initialNote: item.note,
+                        initialLabelIds: item.labelIds,
+                        isAlreadyBookmarked: true,
+                        isAyahBookmark: item.isAyahBookmark,
+                      );
+                    },
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'یادداشت: ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white70 : Colors.black87,
+                            ),
+                          ),
+                          TextSpan(
+                            text: item.note!,
+                          ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: isDark ? Colors.white60 : Colors.black54,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
-      );
+      ),
+    );
   }
 }

@@ -47,8 +47,13 @@ class AppSnackBar {
     );
   }
 
-  static void showSuccess(BuildContext context, String message) {
-    _show(context, message);
+  static void showSuccess(
+    BuildContext context,
+    String message, {
+    SnackBarAction? action,
+    Duration duration = const Duration(seconds: 3),
+  }) {
+    _show(context, message, action: action, duration: duration);
   }
 
   static void showError(BuildContext context, String message) {

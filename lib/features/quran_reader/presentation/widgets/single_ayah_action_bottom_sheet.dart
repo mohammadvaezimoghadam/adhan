@@ -15,6 +15,8 @@ import '../../../../core/routes/go_router_provider.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/services/audio/audio_player_state.dart';
 import '../../../bookmarks/application/controllers/bookmarks_controller.dart';
+import '../../../bookmarks/application/controllers/bookmark_labels_controller.dart';
+import '../../../bookmarks/presentation/widgets/ayah_bookmark_editor_bottom_sheet.dart';
 import '../../application/controllers/quran_audio_controller.dart';
 import '../../application/controllers/quran_display_settings_controller.dart';
 import '../../application/controllers/quran_reader_controller.dart';
@@ -84,13 +86,15 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     // Check if this specific Ayah is currently bookmarked
-    final isBookmarked = ref.watch(
+    final bookmarkItem = ref.watch(
       bookmarksControllerProvider.select(
-        (list) => list.any(
+        (list) => list.where(
           (b) => b.surahId == ayah.surahId && b.ayahNumber == ayah.ayahNumber,
-        ),
+        ).firstOrNull,
       ),
     );
+    final isBookmarked = bookmarkItem != null;
+    final labelMap = isBookmarked ? ref.watch(bookmarkLabelsMapProvider) : null;
 
     // Audio playback status for this Ayah
     final isAudioForThisSurah = ref.watch(
@@ -265,38 +269,25 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                           : CupertinoIcons.bookmark,
                       iconColor: isBookmarked ? primaryColor : (isDark ? Colors.white70 : Colors.black87),
                       label: isBookmarked ? 'نشان‌شده' : 'نشانه‌گذاری',
-                      onTap: () async {
+                      onTap: () {
                         HapticFeedback.lightImpact();
                         final navContext = rootNavigatorKey.currentContext ?? context;
                         final container = ProviderScope.containerOf(navContext, listen: false);
 
                         Navigator.of(context).pop();
                         container.read(selectedAyahActionProvider.notifier).clearSelection();
-                        final isAdded = await container
-                            .read(bookmarksControllerProvider.notifier)
-                            .toggleBookmark(
-                              surahId: ayah.surahId,
-                              surahName: surahName,
-                              ayahNumber: ayah.ayahNumber,
-                              totalAyahs: totalAyahsInSurah,
-                              arabicText: ayah.arabicText,
-                              isAyahBookmark: true,
-                            );
 
-                        final snackContext = rootNavigatorKey.currentContext;
-                        if (snackContext != null && snackContext.mounted) {
-                          if (isAdded) {
-                            AppSnackBar.showSuccess(
-                              snackContext,
-                              'آیه ${ayah.ayahNumber.toPersianDigit()} سوره $cleanSurahName نشانه‌گذاری شد.',
-                            );
-                          } else {
-                            AppSnackBar.showInfo(
-                              snackContext,
-                              'نشانه آیه ${ayah.ayahNumber.toPersianDigit()} حذف شد.',
-                            );
-                          }
-                        }
+                        AyahBookmarkEditorBottomSheet.show(
+                          navContext,
+                          surahId: ayah.surahId,
+                          surahName: cleanSurahName,
+                          ayahNumber: ayah.ayahNumber,
+                          totalAyahs: totalAyahsInSurah,
+                          arabicText: ayah.arabicText,
+                          initialNote: bookmarkItem?.note,
+                          initialLabelIds: bookmarkItem?.labelIds ?? const [],
+                          isAlreadyBookmarked: isBookmarked,
+                        );
                       },
                     ),
                   ),
@@ -374,6 +365,114 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                   ),
                 ],
               ),
+
+              // Quick Bookmark Settings & Note Bar (only visible when bookmarked)
+              if (isBookmarked) ...[
+                8.vSpace,
+                InkWell(
+                  onTap: () {
+                    final navContext = rootNavigatorKey.currentContext ?? context;
+                    Navigator.of(context).pop();
+                    AyahBookmarkEditorBottomSheet.show(
+                      navContext,
+                      surahId: ayah.surahId,
+                      surahName: cleanSurahName,
+                      ayahNumber: ayah.ayahNumber,
+                      totalAyahs: totalAyahsInSurah,
+                      arabicText: ayah.arabicText,
+                      initialNote: bookmarkItem.note,
+                      initialLabelIds: bookmarkItem.labelIds,
+                      isAlreadyBookmarked: true,
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: primaryColor.withValues(alpha: 0.25),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          CupertinoIcons.slider_horizontal_3,
+                          size: 15,
+                          color: primaryColor,
+                        ),
+                        8.hSpace,
+                        Text(
+                          'ویرایش نشانه:',
+                          style: TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: primaryColor,
+                          ),
+                        ),
+                        6.hSpace,
+                        Expanded(
+                          child: bookmarkItem.labelIds.isNotEmpty
+                              ? Wrap(
+                                  spacing: 4,
+                                  runSpacing: 2,
+                                  children: bookmarkItem.labelIds.map((lId) {
+                                    final label = labelMap?[lId];
+                                    if (label == null) return const SizedBox.shrink();
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? Colors.white.withValues(alpha: 0.08)
+                                            : Colors.black.withValues(alpha: 0.05),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        label.title,
+                                        style: TextStyle(
+                                          fontFamily: AppTypography.fontFamily,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark ? Colors.white70 : Colors.black87,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                )
+                              : (bookmarkItem.note != null && bookmarkItem.note!.isNotEmpty)
+                                  ? Text(
+                                      'یادداشت: ${bookmarkItem.note!}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontFamily: AppTypography.fontFamily,
+                                        fontSize: 11,
+                                        color: isDark ? Colors.white70 : Colors.black87,
+                                      ),
+                                    )
+                                  : Text(
+                                      'افزودن برچسب یا یادداشت شخصی...',
+                                      style: TextStyle(
+                                        fontFamily: AppTypography.fontFamily,
+                                        fontSize: 11.5,
+                                        color: isDark ? Colors.white60 : Colors.black54,
+                                      ),
+                                    ),
+                        ),
+                        Icon(
+                          CupertinoIcons.chevron_left,
+                          size: 14,
+                          color: primaryColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               6.vSpace,
             ],
           ),

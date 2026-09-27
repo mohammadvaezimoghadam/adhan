@@ -21,6 +21,7 @@ import 'core/services/notification/firebase_push_notification_service_impl.dart'
 import 'core/services/notification/i_push_notification_service.dart';
 import 'core/services/notification/push_notification_providers.dart';
 import 'features/bookmarks/infrastructure/datasources/bookmark_local_datasource.dart';
+import 'features/bookmarks/infrastructure/datasources/bookmark_label_local_datasource.dart';
 import 'features/tafsir_manager/infrastructure/datasources/tafsir_local_datasource.dart';
 import 'features/translation_manager/infrastructure/datasources/translation_local_datasource.dart';
 import 'main_widget.dart';
@@ -60,6 +61,7 @@ Future<void> _initHiveBoxes() async {
       Hive.openBox(TafsirLocalDataSource.boxName),
       Hive.openBox(AudioStorageServiceImpl.boxName),
       Hive.openBox(BookmarkLocalDataSource.boxName),
+      Hive.openBox(BookmarkLabelLocalDataSource.boxName),
     ]).timeout(const Duration(seconds: 3));
     debugPrint('✅ [Hive] initialized successfully');
   } catch (e) {

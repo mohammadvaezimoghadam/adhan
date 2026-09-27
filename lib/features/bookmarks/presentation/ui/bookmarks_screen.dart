@@ -13,7 +13,12 @@ import '../../../../core/routes/route_name.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../application/controllers/bookmarks_controller.dart';
+import '../../application/controllers/bookmark_labels_controller.dart';
 import '../../domain/entities/bookmark_item.dart';
+import '../../domain/entities/bookmark_label.dart';
+import '../widgets/ayah_bookmark_editor_bottom_sheet.dart';
+import '../widgets/label_filter_chips_bar.dart';
+import '../widgets/manage_labels_bottom_sheet.dart';
 import '../../../quran_reader/application/controllers/quran_display_settings_controller.dart';
 
 /// Full-screen Apple-styled Bookmarks screen designed for the Main Navigation Shell.
@@ -33,6 +38,7 @@ class BookmarksScreen extends ConsumerStatefulWidget {
 
 class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
   int _selectedTabIndex = 0; // 0: All, 1: Ayahs only
+  String? _selectedLabelId; // null: All, 'unlabeled': without labels, or specific labelId
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -174,19 +180,29 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
     final isDark = context.isDark;
     final textSecondary = isDark ? Colors.white60 : Colors.black54;
     final allBookmarks = ref.watch(bookmarksControllerProvider);
+    final labelMap = ref.watch(bookmarkLabelsMapProvider);
 
     final tabFiltered = _selectedTabIndex == 0
         ? allBookmarks
         : allBookmarks.where((b) => b.isAyahBookmark).toList();
 
-    final filtered = _searchQuery.trim().isEmpty
+    final labelFiltered = _selectedLabelId == null
         ? tabFiltered
-        : tabFiltered.where((b) {
+        : _selectedLabelId == 'unlabeled'
+            ? tabFiltered.where((b) => b.labelIds.isEmpty).toList()
+            : tabFiltered
+                .where((b) => b.labelIds.contains(_selectedLabelId))
+                .toList();
+
+    final filtered = _searchQuery.trim().isEmpty
+        ? labelFiltered
+        : labelFiltered.where((b) {
             final query = _searchQuery.trim();
             final matchesSurah = b.surahName.contains(query);
             final matchesAyah = b.ayahNumber.toString().contains(query);
             final matchesArabic = b.arabicText?.contains(query) ?? false;
-            return matchesSurah || matchesAyah || matchesArabic;
+            final matchesNote = b.note?.contains(query) ?? false;
+            return matchesSurah || matchesAyah || matchesArabic || matchesNote;
           }).toList();
 
     final topPadding = MediaQuery.paddingOf(context).top;
@@ -247,6 +263,18 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
                   ),
                 ),
 
+                // Manage Labels button
+                IconButton(
+                  tooltip: 'مدیریت برچسب‌ها',
+                  icon: Icon(
+                    CupertinoIcons.slider_horizontal_3,
+                    size: 20,
+                    color: textSecondary,
+                  ),
+                  splashRadius: 22,
+                  onPressed: () => ManageLabelsBottomSheet.show(context),
+                ),
+
                 if (allBookmarks.isNotEmpty)
                   IconButton(
                     tooltip: 'حذف همه نشانه‌ها',
@@ -257,9 +285,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
                     ),
                     splashRadius: 22,
                     onPressed: _confirmClearAll,
-                  )
-                else
-                  const SizedBox(width: 48),
+                  ),
               ],
             ),
           ),
@@ -280,6 +306,13 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
                   setState(() => _selectedTabIndex = index);
                 },
               ),
+            ),
+            10.vSpace,
+
+            // Horizontal Label Filter Chips Bar
+            LabelFilterChipsBar(
+              selectedLabelId: _selectedLabelId,
+              onLabelSelected: (id) => setState(() => _selectedLabelId = id),
             ),
 
             if (allBookmarks.length > 5) ...[
@@ -339,7 +372,13 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
 
             Expanded(
               child: filtered.isEmpty
-                  ? _buildEmptyState(context, isDark, allBookmarks.isEmpty, textSecondary)
+                  ? _buildEmptyState(
+                      context,
+                      isDark,
+                      allBookmarks.isEmpty,
+                      _selectedLabelId != null,
+                      textSecondary,
+                    )
                   : ListView.separated(
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.only(
@@ -351,7 +390,14 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
                       separatorBuilder: (_, _) => 8.vSpace,
                       itemBuilder: (context, index) {
                         final item = filtered[index];
-                        return _buildBookmarkCard(context, item, isDark, textSecondary);
+                        return _buildBookmarkCard(
+                          context,
+                          item,
+                          isDark,
+                          textSecondary,
+                          labelMap,
+                          key: ValueKey(item.key),
+                        );
                       },
                     ),
             ),
@@ -366,11 +412,14 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
     BookmarkItem item,
     bool isDark,
     Color textSecondary,
-  ) {
+    Map<String, BookmarkLabel> labelMap, {
+    Key? key,
+  }) {
     final colors = context.colors;
     final colorScheme = context.colorScheme;
 
     return Container(
+      key: key,
       decoration: BoxDecoration(
         color: colors.cardBackground,
         borderRadius: BorderRadius.circular(16),
@@ -426,6 +475,42 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Label Badges (Neutral, placed above Surah title)
+                      if (item.labelIds.isNotEmpty) ...[
+                        Wrap(
+                          spacing: 5,
+                          runSpacing: 4,
+                          children: item.labelIds.map((lId) {
+                            final label = labelMap[lId];
+                            if (label == null) return const SizedBox.shrink();
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.04)
+                                    : const Color(0xFFF7F5F0),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.12)
+                                      : Colors.black.withValues(alpha: 0.08),
+                                  width: 0.7,
+                                ),
+                              ),
+                              child: Text(
+                                label.title,
+                                style: TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark ? Colors.white70 : Colors.black54,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        6.vSpace,
+                      ],
                       Row(
                         children: [
                           Text(
@@ -456,7 +541,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
                           ),
                         ],
                       ),
-                      if (item.arabicText != null && item.arabicText!.isNotEmpty) ...[
+                      if (item.isAyahBookmark && item.arabicText != null && item.arabicText!.isNotEmpty) ...[
                         4.vSpace,
                         Text(
                           item.arabicText!,
@@ -466,6 +551,54 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
                             fontFamily: 'UthmanicHafs',
                             fontSize: 14,
                             color: textSecondary,
+                          ),
+                        ),
+                      ],
+                      // Personal Note Snippet (clean text, no box)
+                      if (item.isAyahBookmark && item.note != null && item.note!.isNotEmpty) ...[
+                        4.vSpace,
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(start: 8.0, top: 2.0),
+                          child: GestureDetector(
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              AyahBookmarkEditorBottomSheet.show(
+                                context,
+                                surahId: item.surahId,
+                                surahName: item.surahName,
+                                ayahNumber: item.ayahNumber,
+                                totalAyahs: item.totalAyahs,
+                                arabicText: item.arabicText,
+                                initialNote: item.note,
+                                initialLabelIds: item.labelIds,
+                                isAlreadyBookmarked: true,
+                                isAyahBookmark: item.isAyahBookmark,
+                              );
+                            },
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: 'یادداشت: ',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.white70 : Colors.black87,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: item.note!,
+                                  ),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                                color: textSecondary,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -482,6 +615,39 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
                   ),
                 ),
 
+                // Note / Edit Button
+                IconButton(
+                  tooltip: (item.note != null && item.note!.isNotEmpty)
+                      ? 'ویرایش یادداشت'
+                      : 'افزودن یادداشت',
+                  icon: Icon(
+                    (item.note != null && item.note!.isNotEmpty)
+                        ? CupertinoIcons.square_pencil_fill
+                        : CupertinoIcons.square_pencil,
+                    size: 18,
+                    color: (item.note != null && item.note!.isNotEmpty)
+                        ? colorScheme.primary
+                        : textSecondary.withValues(alpha: 0.65),
+                  ),
+                  splashRadius: 20,
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    AyahBookmarkEditorBottomSheet.show(
+                      context,
+                      surahId: item.surahId,
+                      surahName: item.surahName,
+                      ayahNumber: item.ayahNumber,
+                      totalAyahs: item.totalAyahs,
+                      arabicText: item.arabicText,
+                      initialNote: item.note,
+                      initialLabelIds: item.labelIds,
+                      isAlreadyBookmarked: true,
+                      isAyahBookmark: item.isAyahBookmark,
+                    );
+                  },
+                ),
+
+                // Delete Button
                 IconButton(
                   tooltip: 'حذف نشانک',
                   icon: Icon(
@@ -510,9 +676,25 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
     BuildContext context,
     bool isDark,
     bool isCompletelyEmpty,
+    bool isFilteredByLabel,
     Color textSecondary,
   ) {
     final colorScheme = context.colorScheme;
+
+    String title;
+    String subtitle;
+    if (isCompletelyEmpty) {
+      title = 'هنوز نشانه‌ای ثبت نشده است';
+      subtitle =
+          'هنگام تلاوت قرآن، می‌توانید با لمس آیکون نشانه‌گذاری در بالای صفحه، آیه یا سوره مورد نظر خود را ذخیره کنید.';
+    } else if (isFilteredByLabel) {
+      title = 'هیچ نشانه‌ای با این برچسب یافت نشد';
+      subtitle =
+          'می‌توانید با لمس آیکون برچسب روی هر نشانه، این برچسب را به آن اختصاص دهید یا فیلتر را تغییر دهید.';
+    } else {
+      title = 'موردی با این عبارت یافت نشد';
+      subtitle = 'لطفاً عبارت دیگری را جستجو کنید.';
+    }
 
     return Center(
       child: SingleChildScrollView(
@@ -533,7 +715,9 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
               ),
               child: Center(
                 child: Icon(
-                  CupertinoIcons.bookmark,
+                  isFilteredByLabel
+                      ? CupertinoIcons.tag
+                      : CupertinoIcons.bookmark,
                   size: 38,
                   color: colorScheme.primary,
                 ),
@@ -541,9 +725,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
             ),
             16.vSpace,
             Text(
-              isCompletelyEmpty
-                  ? 'هنوز نشانه‌ای ثبت نشده است'
-                  : 'موردی با این عبارت یافت نشد',
+              title,
               style: TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 16,
@@ -553,9 +735,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
             ),
             8.vSpace,
             Text(
-              isCompletelyEmpty
-                  ? 'هنگام تلاوت قرآن، می‌توانید با لمس آیکون نشانه‌گذاری در بالای صفحه، آیه یا سوره مورد نظر خود را ذخیره کنید.'
-                  : 'لطفاً عبارت دیگری را جستجو کنید.',
+              subtitle,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: AppTypography.fontFamily,
