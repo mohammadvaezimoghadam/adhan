@@ -4,7 +4,7 @@ import 'package:quran/common/constants/app_constants.dart';
 import 'package:quran/features/splash/presentation/ui/splash_screen.dart';
 
 void main() {
-  testWidgets('SplashScreen renders background image and app title',
+  testWidgets('SplashScreen renders plain white screen and app title',
       (WidgetTester tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -15,17 +15,18 @@ void main() {
     // Initial render and start animations
     await tester.pump(const Duration(milliseconds: 100));
 
-    // Verify background image is present
-    final imageFinder = find.byType(Image);
-    expect(imageFinder, findsOneWidget);
+    // Verify background image is NOT present
+    expect(find.byType(Image), findsNothing);
 
-    final imageWidget = tester.widget<Image>(imageFinder);
-    expect(imageWidget.image, isA<AssetImage>());
-    expect((imageWidget.image as AssetImage).assetName,
-        AppConstants.splashBgAsset);
+    // Verify Scaffold background is white
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(scaffold.backgroundColor, equals(Colors.white));
 
     // Verify app title text is rendered
     expect(find.text(AppConstants.appTitle), findsOneWidget);
+
+    // Verify 'گروه تفکر' brand text is rendered at bottom
+    expect(find.text('گروه تفکر'), findsOneWidget);
 
     // Advance time past the 1400ms timer
     await tester.pump(const Duration(milliseconds: 1500));

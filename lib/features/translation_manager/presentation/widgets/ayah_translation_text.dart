@@ -13,7 +13,7 @@ import '../../../quran_reader/domain/entities/ayah_theme_entity.dart';
 import '../../application/controllers/ayah_translation_provider.dart';
 import 'translation_skeleton.dart';
 
-/// Renders the translation text of an Ayah.
+/// Renders the translation text of an Ayah as non-selectable plain text.
 /// This widget is fully decoupled from the Reader feature's display settings.
 class AyahTranslationText extends ConsumerWidget {
   final int surahId;
@@ -42,21 +42,31 @@ class AyahTranslationText extends ConsumerWidget {
     }
 
     // Fetch the translation using the translation_manager module
-    final translationAsync = ref.watch(ayahTranslationProvider(surahId, ayahNumber, translationId));
-    
+    final translationAsync = ref.watch(
+      ayahTranslationProvider(
+        surahId,
+        ayahNumber,
+        translationId,
+      ),
+    );
+
     if (translationAsync.isLoading && !translationAsync.hasValue) {
       return const TranslationSkeleton();
     }
 
     final removeBrackets = ref.watch(
-      quranDisplaySettingsControllerProvider.select((s) => s.removeTranslationBrackets),
+      quranDisplaySettingsControllerProvider
+          .select((s) => s.removeTranslationBrackets),
     );
     final translationFontFamily = ref.watch(
-      quranDisplaySettingsControllerProvider.select((s) => s.translationFontFamily),
+      quranDisplaySettingsControllerProvider
+          .select((s) => s.translationFontFamily),
     );
 
     final rawTranslation = translationAsync.value ?? fallbackText;
-    final textToClean = removeBrackets ? rawTranslation.removeTranslatorExplanations() : rawTranslation;
+    final textToClean = removeBrackets
+        ? rawTranslation.removeTranslatorExplanations()
+        : rawTranslation;
     final translationText = ArabicTextHelper.sanitizeText(textToClean);
 
     if (translationText.isEmpty) {
@@ -65,7 +75,8 @@ class AyahTranslationText extends ConsumerWidget {
 
     final isRtl = Bidi.detectRtlDirectionality(translationText);
     final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
-    final ayahNumStr = isRtl ? ayahNumber.toPersianDigit() : ayahNumber.toString();
+    final ayahNumStr =
+        isRtl ? ayahNumber.toPersianDigit() : ayahNumber.toString();
 
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -78,8 +89,12 @@ class AyahTranslationText extends ConsumerWidget {
     final textColor = activeTheme.isDark
         ? (isActive ? Colors.white : Colors.white.withValues(alpha: 0.72))
         : (isDark && !activeTheme.isDark
-            ? (isActive ? const Color(0xFF1C1B1B) : const Color(0xFF3E4947))
-            : (isActive ? colorScheme.onSurface : colorScheme.onSurfaceVariant));
+            ? (isActive
+                ? const Color(0xFF1C1B1B)
+                : const Color(0xFF3E4947))
+            : (isActive
+                ? colorScheme.onSurface
+                : colorScheme.onSurfaceVariant));
 
     final style = AppTypography.translationText.copyWith(
       fontFamily: translationFontFamily,
@@ -91,6 +106,8 @@ class AyahTranslationText extends ConsumerWidget {
       color: textColor,
     );
 
+    final fullDisplayedText = '$translationText ($ayahNumStr)';
+
     return SizedBox(
       width: double.infinity,
       child: Column(
@@ -98,7 +115,7 @@ class AyahTranslationText extends ConsumerWidget {
         children: [
           AppDimens.stackMd.vSpace,
           Text(
-            '$translationText ($ayahNumStr)',
+            fullDisplayedText,
             textAlign: TextAlign.justify,
             textDirection: textDirection,
             style: style,

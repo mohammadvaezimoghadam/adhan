@@ -26,7 +26,8 @@ class MainNavigationScreen extends ConsumerStatefulWidget {
   const MainNavigationScreen({super.key});
 
   @override
-  ConsumerState<MainNavigationScreen> createState() => _MainNavigationScreenState();
+  ConsumerState<MainNavigationScreen> createState() =>
+      _MainNavigationScreenState();
 }
 
 class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
@@ -49,7 +50,14 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
             },
           );
         case 2:
-          return const SearchScreen(showBackButton: false);
+          return SearchScreen(
+            showBackButton: true,
+            onBackPressed: () {
+              ref
+                  .read(tabNavigationControllerProvider.notifier)
+                  .handleBackPress();
+            },
+          );
         case 3:
           return ProfileScreen(
             showBackButton: true,
@@ -87,14 +95,14 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     // Unfocus active inputs and dismiss keyboard on any tab change
-    ref.listen<TabNavigationState>(
-      tabNavigationControllerProvider,
-      (previous, next) {
-        if (previous?.currentIndex != next.currentIndex) {
-          FocusManager.instance.primaryFocus?.unfocus();
-        }
-      },
-    );
+    ref.listen<TabNavigationState>(tabNavigationControllerProvider, (
+      previous,
+      next,
+    ) {
+      if (previous?.currentIndex != next.currentIndex) {
+        FocusManager.instance.primaryFocus?.unfocus();
+      }
+    });
 
     final navState = ref.watch(tabNavigationControllerProvider);
     final activeIndex = navState.currentIndex;
@@ -129,7 +137,8 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
           // 2. Double-press back to exit gracefully
           final now = DateTime.now();
           if (_lastBackPressTime == null ||
-              now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+              now.difference(_lastBackPressTime!) >
+                  const Duration(seconds: 2)) {
             _lastBackPressTime = now;
             AppSnackBar.showInfo(
               context,
@@ -154,7 +163,9 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
                 currentIndex: activeIndex,
                 onTabSelected: (index) {
                   FocusManager.instance.primaryFocus?.unfocus();
-                  ref.read(tabNavigationControllerProvider.notifier).switchTab(index);
+                  ref
+                      .read(tabNavigationControllerProvider.notifier)
+                      .switchTab(index);
                 },
               ),
             ],
@@ -169,7 +180,9 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
                 currentIndex: activeIndex,
                 onTabSelected: (index) {
                   FocusManager.instance.primaryFocus?.unfocus();
-                  ref.read(tabNavigationControllerProvider.notifier).switchTab(index);
+                  ref
+                      .read(tabNavigationControllerProvider.notifier)
+                      .switchTab(index);
                 },
               ),
               // Main Content Area with Top Bar and Docked Player
@@ -179,7 +192,9 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
                     // Universal Web Top Navigation Bar
                     WebTopNavBar(
                       onSearchTap: () {
-                        ref.read(tabNavigationControllerProvider.notifier).switchTab(2);
+                        ref
+                            .read(tabNavigationControllerProvider.notifier)
+                            .switchTab(2);
                       },
                     ),
                     // Active Tab Body

@@ -57,7 +57,7 @@ class QuickAccessController extends Notifier<QuickAccessState> {
           }
 
           final type = QuickAccessToolType.fromId(rawId);
-          if (type == null) return null;
+          if (type == null || type == QuickAccessToolType.topicStudio) return null;
           return catalog.where((c) => c.type == type).firstOrNull;
         }).toList();
 

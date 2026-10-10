@@ -418,6 +418,7 @@ class _QuickSettingsDrawerState extends ConsumerState<QuickSettingsDrawer> {
                       onChanged: (val) =>
                           displayNotifier.toggleAyahNumbers(val),
                     ),
+
                     _buildInnerDivider(colorScheme),
                     _buildThemeTile(
                       context: context,

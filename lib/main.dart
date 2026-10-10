@@ -10,6 +10,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_patcher/flutter_patcher.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'core/data/local/preferences/preferences_service_provider.dart';
@@ -22,7 +23,9 @@ import 'core/services/notification/i_push_notification_service.dart';
 import 'core/services/notification/push_notification_providers.dart';
 import 'features/bookmarks/infrastructure/datasources/bookmark_local_datasource.dart';
 import 'features/bookmarks/infrastructure/datasources/bookmark_label_local_datasource.dart';
+import 'features/study_plan/infrastructure/datasources/study_plan_local_datasource.dart';
 import 'features/tafsir_manager/infrastructure/datasources/tafsir_local_datasource.dart';
+import 'features/topic_studio/infrastructure/datasources/topic_local_datasource.dart';
 import 'features/translation_manager/infrastructure/datasources/translation_local_datasource.dart';
 import 'main_widget.dart';
 
@@ -62,6 +65,8 @@ Future<void> _initHiveBoxes() async {
       Hive.openBox(AudioStorageServiceImpl.boxName),
       Hive.openBox(BookmarkLocalDataSource.boxName),
       Hive.openBox(BookmarkLabelLocalDataSource.boxName),
+      Hive.openBox(TopicLocalDataSource.boxName),
+      Hive.openBox(StudyPlanLocalDataSource.boxName),
     ]).timeout(const Duration(seconds: 3));
     debugPrint('✅ [Hive] initialized successfully');
   } catch (e) {
@@ -114,6 +119,9 @@ void main() async {
     sharedPrefsFuture,
     FirebaseInitializer.init().catchError((e) {
       debugPrint('Firebase init error: $e');
+    }),
+    FlutterPatcher.init().catchError((e) {
+      debugPrint('FlutterPatcher init error: $e');
     }),
   ]);
 

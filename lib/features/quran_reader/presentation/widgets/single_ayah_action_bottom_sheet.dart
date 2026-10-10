@@ -1,3 +1,8 @@
+import 'dart:ui';
+import '../../../../common/constants/app_constants.dart';
+import '../../../topic_studio/application/controllers/in_drawer_editor_controller.dart';
+import '../../../topic_studio/domain/entities/topic_drag_data.dart';
+import '../../../topic_studio/presentation/ui/tafakor_editor_screen.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,10 +17,10 @@ import '../../../../common/extensions/size_extension.dart';
 import '../../../../common/widgets/app_modal_header.dart';
 import '../../../../common/widgets/app_snackbar.dart';
 import '../../../../core/routes/go_router_provider.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/services/audio/audio_player_state.dart';
 import '../../../bookmarks/application/controllers/bookmarks_controller.dart';
-import '../../../bookmarks/application/controllers/bookmark_labels_controller.dart';
 import '../../../bookmarks/presentation/widgets/ayah_bookmark_editor_bottom_sheet.dart';
 import '../../application/controllers/quran_audio_controller.dart';
 import '../../application/controllers/quran_display_settings_controller.dart';
@@ -94,7 +99,6 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
       ),
     );
     final isBookmarked = bookmarkItem != null;
-    final labelMap = isBookmarked ? ref.watch(bookmarkLabelsMapProvider) : null;
 
     // Audio playback status for this Ayah
     final isAudioForThisSurah = ref.watch(
@@ -269,7 +273,7 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                           : CupertinoIcons.bookmark,
                       iconColor: isBookmarked ? primaryColor : (isDark ? Colors.white70 : Colors.black87),
                       label: isBookmarked ? 'نشان‌شده' : 'نشانه‌گذاری',
-                      onTap: () {
+                      onTap: () async {
                         HapticFeedback.lightImpact();
                         final navContext = rootNavigatorKey.currentContext ?? context;
                         final container = ProviderScope.containerOf(navContext, listen: false);
@@ -277,17 +281,30 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                         Navigator.of(context).pop();
                         container.read(selectedAyahActionProvider.notifier).clearSelection();
 
-                        AyahBookmarkEditorBottomSheet.show(
-                          navContext,
-                          surahId: ayah.surahId,
-                          surahName: cleanSurahName,
-                          ayahNumber: ayah.ayahNumber,
-                          totalAyahs: totalAyahsInSurah,
-                          arabicText: ayah.arabicText,
-                          initialNote: bookmarkItem?.note,
-                          initialLabelIds: bookmarkItem?.labelIds ?? const [],
-                          isAlreadyBookmarked: isBookmarked,
-                        );
+                        if (isBookmarked) {
+                          await container
+                              .read(bookmarksControllerProvider.notifier)
+                              .removeBookmark(ayah.surahId, ayah.ayahNumber);
+                          final snackContext = rootNavigatorKey.currentContext;
+                          if (snackContext != null && snackContext.mounted) {
+                            AppSnackBar.showSuccess(
+                              snackContext,
+                              'آیه ${ayah.ayahNumber.toPersianDigit()} سوره $cleanSurahName از نشانه‌ها حذف شد.',
+                            );
+                          }
+                        } else {
+                          AyahBookmarkEditorBottomSheet.show(
+                            navContext,
+                            surahId: ayah.surahId,
+                            surahName: cleanSurahName,
+                            ayahNumber: ayah.ayahNumber,
+                            totalAyahs: totalAyahsInSurah,
+                            arabicText: ayah.arabicText,
+                            initialNote: null,
+                            initialLabelIds: const [],
+                            isAlreadyBookmarked: false,
+                          );
+                        }
                       },
                     ),
                   ),
@@ -363,116 +380,44 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                       },
                     ),
                   ),
+                  8.hSpace,
+
+                  // Action 7: Tafakor (دفتر تفکر)
+                  Expanded(
+                    child: _buildTafakorButton(
+                      context: context,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        final navContext = rootNavigatorKey.currentContext ?? context;
+                        final container = ProviderScope.containerOf(navContext, listen: false);
+
+                        final removeBrackets = container
+                            .read(quranDisplaySettingsControllerProvider)
+                            .removeTranslationBrackets;
+
+                        final dragData = TopicDragData(
+                          ayahs: [ayah],
+                          surahName: cleanSurahName,
+                          translations: {ayah.ayahNumber: ayah.translationText ?? ''},
+                          removeBrackets: removeBrackets,
+                        );
+                        final blocks = dragData.toBlocks();
+
+                        container.read(inDrawerEditorControllerProvider.notifier).setBlocks(blocks);
+                        Navigator.of(context).pop();
+                        container.read(selectedAyahActionProvider.notifier).clearSelection();
+
+                        Navigator.of(navContext).push(
+                          MaterialPageRoute(
+                            builder: (_) => const TafakorEditorScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ),
 
-              // Quick Bookmark Settings & Note Bar (only visible when bookmarked)
-              if (isBookmarked) ...[
-                8.vSpace,
-                InkWell(
-                  onTap: () {
-                    final navContext = rootNavigatorKey.currentContext ?? context;
-                    Navigator.of(context).pop();
-                    AyahBookmarkEditorBottomSheet.show(
-                      navContext,
-                      surahId: ayah.surahId,
-                      surahName: cleanSurahName,
-                      ayahNumber: ayah.ayahNumber,
-                      totalAyahs: totalAyahsInSurah,
-                      arabicText: ayah.arabicText,
-                      initialNote: bookmarkItem.note,
-                      initialLabelIds: bookmarkItem.labelIds,
-                      isAlreadyBookmarked: true,
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                    decoration: BoxDecoration(
-                      color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: primaryColor.withValues(alpha: 0.25),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          CupertinoIcons.slider_horizontal_3,
-                          size: 15,
-                          color: primaryColor,
-                        ),
-                        8.hSpace,
-                        Text(
-                          'ویرایش نشانه:',
-                          style: TextStyle(
-                            fontFamily: AppTypography.fontFamily,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: primaryColor,
-                          ),
-                        ),
-                        6.hSpace,
-                        Expanded(
-                          child: bookmarkItem.labelIds.isNotEmpty
-                              ? Wrap(
-                                  spacing: 4,
-                                  runSpacing: 2,
-                                  children: bookmarkItem.labelIds.map((lId) {
-                                    final label = labelMap?[lId];
-                                    if (label == null) return const SizedBox.shrink();
-                                    return Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 1.5),
-                                      decoration: BoxDecoration(
-                                        color: isDark
-                                            ? Colors.white.withValues(alpha: 0.08)
-                                            : Colors.black.withValues(alpha: 0.05),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        label.title,
-                                        style: TextStyle(
-                                          fontFamily: AppTypography.fontFamily,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: isDark ? Colors.white70 : Colors.black87,
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                )
-                              : (bookmarkItem.note != null && bookmarkItem.note!.isNotEmpty)
-                                  ? Text(
-                                      'یادداشت: ${bookmarkItem.note!}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontFamily: AppTypography.fontFamily,
-                                        fontSize: 11,
-                                        color: isDark ? Colors.white70 : Colors.black87,
-                                      ),
-                                    )
-                                  : Text(
-                                      'افزودن برچسب یا یادداشت شخصی...',
-                                      style: TextStyle(
-                                        fontFamily: AppTypography.fontFamily,
-                                        fontSize: 11.5,
-                                        color: isDark ? Colors.white60 : Colors.black54,
-                                      ),
-                                    ),
-                        ),
-                        Icon(
-                          CupertinoIcons.chevron_left,
-                          size: 14,
-                          color: primaryColor,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
               6.vSpace,
             ],
           ),
@@ -533,6 +478,84 @@ class SingleAyahActionBottomSheet extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTafakorButton({
+    required BuildContext context,
+    required VoidCallback onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final greenColor = isDark ? const Color(0xFF52C498) : AppColors.primary;
+
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: greenColor.withValues(alpha: isDark ? 0.35 : 0.22),
+          width: 0.9,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.20)
+                : greenColor.withValues(alpha: 0.08),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            fit: StackFit.expand,
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 1.0, sigmaY: 1.0),
+                  child: Image.asset(
+                    AppConstants.splashBgAsset,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: Container(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.15)
+                      : Colors.white.withValues(alpha: 0.30),
+                ),
+              ),
+              Center(
+                child: Text(
+                  'تفکر',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.primary,
+                    letterSpacing: 0.5,
+                    shadows: [
+                      Shadow(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

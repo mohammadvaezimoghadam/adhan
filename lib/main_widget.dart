@@ -1,3 +1,4 @@
+import 'features/tafakor/application/controllers/tafakor_auth_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,8 @@ class MainWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Warm up Tafakor auth state eagerly at root level
+    ref.watch(tafakorAuthControllerProvider);
     final router = ref.watch(goRouterProvider);
     final themeMode = ref.watch(themeControllerProvider);
 

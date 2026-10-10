@@ -44,14 +44,14 @@ class _SmartSelectionAreaState extends State<SmartSelectionArea> {
         _downPosition = e.position;
       },
       onPointerMove: (e) {
-        if ((e.position - _downPosition).distance > 10) {
+        if ((e.position - _downPosition).distance > 20) {
           _downTime = null; // Invalidate on move/scroll
         }
       },
       onPointerUp: (e) {
         if (_downTime != null && widget.onTap != null) {
           final duration = DateTime.now().difference(_downTime!);
-          if (duration.inMilliseconds < 350) {
+          if (duration.inMilliseconds < 500) {
             widget.onTap!(); // Trigger tap logic
           }
         }

@@ -16,7 +16,6 @@ import '../../application/controllers/quran_reader_controller.dart';
 import '../../application/controllers/selected_ayah_action_provider.dart';
 import '../../domain/entities/ayah_entity.dart';
 import '../../domain/entities/ayah_theme_entity.dart';
-import '../../../../common/widgets/smart_selection_area.dart';
 import '../utils/reciter_download_helper.dart';
 import 'ayah_arabic_text.dart';
 import 'quran_ornamental_divider.dart';
@@ -126,13 +125,6 @@ class AyahListItem extends ConsumerWidget {
         (isHizbStart && ayah.hizb != null);
 
     Future<void> handleDoubleTap() async {
-      // UX INTERCEPT: If text is actively selected or selection mode is active, do nothing
-      if (SmartSelectionArea.hasGlobalSelection) {
-        FocusManager.instance.primaryFocus?.unfocus();
-        SmartSelectionArea.hasGlobalSelection = false;
-        return;
-      }
-
       final currentSelected = ref.read(selectedAyahActionProvider);
       if (currentSelected.isNotEmpty) {
         return;
@@ -165,14 +157,6 @@ class AyahListItem extends ConsumerWidget {
     }
 
     void handleTap() {
-      // UX INTERCEPT: If text is actively selected, tapping ANYWHERE on this item
-      // should ONLY clear the text selection, NOT deselect the entire Ayah.
-      if (SmartSelectionArea.hasGlobalSelection) {
-        FocusManager.instance.primaryFocus?.unfocus();
-        SmartSelectionArea.hasGlobalSelection = false; // Optimistic update
-        return;
-      }
-
       final currentSelected = ref.read(selectedAyahActionProvider);
       if (currentSelected.isNotEmpty) {
         // Tap toggles selection when selection mode is active
@@ -196,10 +180,10 @@ class AyahListItem extends ConsumerWidget {
       }
     }
 
-    return RepaintBoundary(
+    final ayahWidget = RepaintBoundary(
       child: InkWell(
         onTap: handleTap,
-        onDoubleTap: handleDoubleTap,
+        onDoubleTap: isSelectionMode ? null : handleDoubleTap,
         onLongPress: () {
           final controlsState = ref.read(readerControlsProvider);
           if (controlsState.isControlsHidden) {
@@ -210,13 +194,13 @@ class AyahListItem extends ConsumerWidget {
           final currentSelected = ref.read(selectedAyahActionProvider);
           final isFirstAyahSelection = currentSelected.isEmpty;
 
-          // Long Press toggles selection mode for this Ayah
+          // Long Press selects this Ayah
           ref
               .read(selectedAyahActionProvider.notifier)
-              .toggleAyah(ayah.ayahNumber);
+              .selectAyah(ayah.ayahNumber);
 
-          // If this is the first Ayah being selected via long-press, open the dedicated action sheet
-          if (isFirstAyahSelection) {
+          // If this is the first Ayah being selected via long-press, open the action sheet
+          if (isFirstAyahSelection && context.mounted) {
             SingleAyahActionBottomSheet.show(
               context,
               ayah: ayah,
@@ -331,33 +315,25 @@ class AyahListItem extends ConsumerWidget {
                       children: [
                         if (showArabicText)
                           Expanded(
-                            child: SmartSelectionArea(
-                              isSelectable: isSelectedForAction,
-                              onTap: handleTap,
-                              child: AyahArabicText(
-                                text: ayah.arabicText,
-                                ayahNumber: ayah.ayahNumber,
-                                isActive: isAudioActive,
-                                surahId: ayah.surahId,
-                              ),
+                            child: AyahArabicText(
+                              text: ayah.arabicText,
+                              ayahNumber: ayah.ayahNumber,
+                              isActive: isAudioActive,
+                              surahId: ayah.surahId,
                             ),
                           ),
                         if (showArabicText && showTranslation)
                           const SizedBox(width: 24),
                         if (showTranslation)
                           Expanded(
-                            child: SmartSelectionArea(
-                              isSelectable: isSelectedForAction,
-                              onTap: handleTap,
-                              child: AyahTranslationText(
-                                surahId: ayah.surahId,
-                                ayahNumber: ayah.ayahNumber,
-                                fallbackText: ayah.translationText ?? '',
-                                isActive: isAudioActive,
-                                isVisible: showTranslation,
-                                fontSize: translationFontSize,
-                                translationId: translationId,
-                              ),
+                            child: AyahTranslationText(
+                              surahId: ayah.surahId,
+                              ayahNumber: ayah.ayahNumber,
+                              fallbackText: ayah.translationText ?? '',
+                              isActive: isAudioActive,
+                              isVisible: showTranslation,
+                              fontSize: translationFontSize,
+                              translationId: translationId,
                             ),
                           ),
                       ],
@@ -368,30 +344,22 @@ class AyahListItem extends ConsumerWidget {
                       children: [
                         // Main Arabic Ayah Text with Embedded Ayah Marker
                         if (showArabicText)
-                          SmartSelectionArea(
-                            isSelectable: isSelectedForAction,
-                            onTap: handleTap,
-                            child: AyahArabicText(
-                              text: ayah.arabicText,
-                              ayahNumber: ayah.ayahNumber,
-                              isActive: isAudioActive,
-                              surahId: ayah.surahId,
-                            ),
+                          AyahArabicText(
+                            text: ayah.arabicText,
+                            ayahNumber: ayah.ayahNumber,
+                            isActive: isAudioActive,
+                            surahId: ayah.surahId,
                           ),
                         // Ayah Persian Translation
                         if (showTranslation)
-                          SmartSelectionArea(
-                            isSelectable: isSelectedForAction,
-                            onTap: handleTap,
-                            child: AyahTranslationText(
-                              surahId: ayah.surahId,
-                              ayahNumber: ayah.ayahNumber,
-                              fallbackText: ayah.translationText ?? '',
-                              isActive: isAudioActive,
-                              isVisible: showTranslation,
-                              fontSize: translationFontSize,
-                              translationId: translationId,
-                            ),
+                          AyahTranslationText(
+                            surahId: ayah.surahId,
+                            ayahNumber: ayah.ayahNumber,
+                            fallbackText: ayah.translationText ?? '',
+                            isActive: isAudioActive,
+                            isVisible: showTranslation,
+                            fontSize: translationFontSize,
+                            translationId: translationId,
                           ),
                       ],
                     ),
@@ -442,5 +410,7 @@ class AyahListItem extends ConsumerWidget {
         ),
       ),
     );
+
+    return ayahWidget;
   }
 }

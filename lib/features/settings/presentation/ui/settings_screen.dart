@@ -2,19 +2,20 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+// import 'package:go_router/go_router.dart';
 
 import '../../../../common/extensions/context_extension.dart';
 import '../../../../common/extensions/size_extension.dart';
-import '../../../../common/extensions/string_extension.dart';
+// import '../../../../common/extensions/string_extension.dart';
 import '../../../../common/widgets/app_modal_header.dart';
-import '../../../../core/routes/route_name.dart';
+// import '../../../../core/routes/route_name.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../bookmarks/presentation/widgets/manage_labels_bottom_sheet.dart';
 import '../../../main_navigation/application/tab_navigation_controller.dart';
 import '../../../quran_reader/presentation/widgets/quick_settings_drawer.dart';
-import '../../../subscription/application/vip_subscription_controller.dart';
+// import '../../../subscription/application/vip_subscription_controller.dart';
 import '../../../translation_manager/presentation/widgets/translation_manager_bottom_sheet.dart';
+import '../../../ota_update/application/controllers/ota_update_controller.dart';
 
 /// Clean Apple-Style Settings Screen with Profile & Subscription Integration
 class SettingsScreen extends ConsumerWidget {
@@ -32,15 +33,16 @@ class SettingsScreen extends ConsumerWidget {
     final colors = context.colors;
     final colorScheme = context.colorScheme;
     final isDark = context.isDark;
-    final isVip = ref.watch(hasVipAccessProvider);
-    final vipState = ref.watch(vipSubscriptionControllerProvider);
+    final versionDisplay = ref.watch(appVersionDisplayProvider);
+    // final isVip = ref.watch(hasVipAccessProvider);
+    // final vipState = ref.watch(vipSubscriptionControllerProvider);
 
-    final profileSubtitle = isVip
-        ? (vipState.remainingDays > 0
-            ? 'اشتراک ویژه فعال است (${vipState.remainingDays} روز باقی‌مانده)'
-                .toPersianDigit()
-            : 'اشتراک ویژه فعال است (مشاهده و تمدید)')
-        : 'کاربر عادی - خرید و ارتقا به اشتراک ویژه تفکر';
+    // final profileSubtitle = isVip
+    //     ? (vipState.remainingDays > 0
+    //         ? 'اشتراک ویژه فعال است (${vipState.remainingDays} روز باقی‌مانده)'
+    //             .toPersianDigit()
+    //         : 'اشتراک ویژه فعال است (مشاهده و تمدید)')
+    //     : 'کاربر عادی - خرید و ارتقا به اشتراک ویژه تفکر';
 
     return Scaffold(
       appBar: PreferredSize(
@@ -108,7 +110,8 @@ class SettingsScreen extends ConsumerWidget {
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         children: [
-          // Section 1: Profile & Account (No icon, identical to other items)
+          // Section 1: Profile & Account (Commented out)
+          /*
           _buildSectionHeader('پروفایل', isDark),
           6.vSpace,
           _buildGroupCard(
@@ -152,6 +155,7 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
           18.vSpace,
+          */
 
           // Section 2: Reading Experience & Content
           _buildSectionHeader('مطالعه و محتوا', isDark),
@@ -207,8 +211,8 @@ class SettingsScreen extends ConsumerWidget {
               _buildSettingsTile(
                 context: context,
                 title: 'درباره قرآن تفکر',
-                subtitle: 'نسخه ۱.۰.۰',
-                onTap: () => _showAboutDialog(context),
+                subtitle: versionDisplay,
+                onTap: () => _showAboutDialog(context, versionDisplay),
               ),
             ],
           ),
@@ -217,7 +221,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showAboutDialog(BuildContext context) {
+  void _showAboutDialog(BuildContext context, String versionDisplay) {
     final colors = context.colors;
     final colorScheme = context.colorScheme;
 
@@ -252,7 +256,7 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'نسخه ۱.۰.۰',
+                  versionDisplay,
                   style: TextStyle(
                     fontFamily: AppTypography.fontFamily,
                     fontSize: 12,

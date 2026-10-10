@@ -39,7 +39,7 @@ final class TranslationManagerControllerProvider
 }
 
 String _$translationManagerControllerHash() =>
-    r'8d671568f865495b72b87c24cb164281c31b0f4f';
+    r'df442f67ba07f5ba7d9403a0399ba39aea14fe1e';
 
 abstract class _$TranslationManagerController
     extends $AsyncNotifier<TranslationManagerState> {

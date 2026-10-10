@@ -5,10 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../common/extensions/context_extension.dart';
+import '../../../../core/theme/app_typography.dart';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../ota_update/application/controllers/ota_update_controller.dart';
 
 /// Apple-inspired vertical NavigationRail for desktop/web layout.
 /// Glassmorphic styling matching the existing BottomNavBar aesthetic.
-class AppNavigationRail extends StatelessWidget {
+class AppNavigationRail extends ConsumerWidget {
   final int currentIndex;
   final ValueChanged<int> onTabSelected;
 
@@ -19,10 +23,12 @@ class AppNavigationRail extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
     final colorScheme = context.colorScheme;
     final isDark = context.isDark;
+    // OTA Update badge
+    final hasUpdate = ref.watch(hasOtaUpdateProvider);
 
     final primaryColor = colorScheme.primary;
     final inactiveColor =
@@ -96,6 +102,7 @@ class AppNavigationRail extends StatelessWidget {
                     primaryColor: primaryColor,
                     inactiveColor: inactiveColor,
                     isDark: isDark,
+                    showBadge: hasUpdate,
                   ),
 
                   const Spacer(),
@@ -117,6 +124,7 @@ class AppNavigationRail extends StatelessWidget {
     required Color primaryColor,
     required Color inactiveColor,
     required bool isDark,
+    bool showBadge = false,
   }) {
     final isSelected = currentIndex == index;
 
@@ -145,10 +153,47 @@ class AppNavigationRail extends StatelessWidget {
               decoration: const BoxDecoration(
                 color: Colors.transparent,
               ),
-              child: Icon(
-                isSelected ? activeIcon : inactiveIcon,
-                size: 26,
-                color: isSelected ? primaryColor : inactiveColor,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    isSelected ? activeIcon : inactiveIcon,
+                    size: 26,
+                    color: isSelected ? primaryColor : inactiveColor,
+                  ),
+                  if (showBadge)
+                    Positioned(
+                      top: -7,
+                      left: -18,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4.5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.redAccent.withValues(alpha: 0.35),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: const Text(
+                          'بروزرسانی',
+                          style: TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            height: 1.1,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

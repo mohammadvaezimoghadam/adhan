@@ -18,11 +18,21 @@ final selectedAyahActionProvider =
 );
 
 class SelectedAyahActionController extends Notifier<Set<int>> {
+  int? _lastToggledAyah;
+  int _lastToggleTime = 0;
+
   @override
   Set<int> build() => const {};
 
-  /// Toggle selection of an Ayah.
+  /// Toggle selection of an Ayah with debounce to prevent duplicate events.
   void toggleAyah(int ayahNumber) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (_lastToggledAyah == ayahNumber && (now - _lastToggleTime) < 150) {
+      return;
+    }
+    _lastToggledAyah = ayahNumber;
+    _lastToggleTime = now;
+
     final current = Set<int>.from(state);
     if (current.contains(ayahNumber)) {
       current.remove(ayahNumber);
@@ -39,8 +49,23 @@ class SelectedAyahActionController extends Notifier<Set<int>> {
     }
   }
 
+  /// Explicitly select an Ayah (idempotent; does not deselect if already selected).
+  void selectAyah(int ayahNumber) {
+    if (state.contains(ayahNumber)) return;
+    final current = Set<int>.from(state)..add(ayahNumber);
+    state = Set.unmodifiable(current);
+
+    final isAudioPlaying =
+        ref.read(quranAudioControllerProvider).status == AudioStatus.playing;
+    if (isAudioPlaying && state.isNotEmpty) {
+      ref.read(quranAudioControllerProvider.notifier).suspendAutoScroll();
+    }
+  }
+
   /// Clear selection and return to normal reading state.
   void clearSelection() {
+    _lastToggledAyah = null;
+    _lastToggleTime = 0;
     if (state.isNotEmpty) {
       state = const {};
     }

@@ -6,8 +6,11 @@ import 'package:flutter/services.dart';
 import '../../../../common/extensions/context_extension.dart';
 import '../../../../core/theme/app_typography.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../ota_update/application/controllers/ota_update_controller.dart';
+
 /// Clean Apple-styled Bottom Navigation Bar with Blur, Haptics, and Tafakor Mint accents.
-class AppBottomNavBar extends StatelessWidget {
+class AppBottomNavBar extends ConsumerWidget {
   final int currentIndex;
   final ValueChanged<int> onTabSelected;
 
@@ -18,7 +21,7 @@ class AppBottomNavBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
     final colorScheme = context.colorScheme;
     final isDark = context.isDark;
@@ -26,6 +29,8 @@ class AppBottomNavBar extends StatelessWidget {
 
     final primaryColor = colorScheme.primary;
     final inactiveColor = isDark ? const Color(0xFF8E8E93) : const Color(0xFF8A8A8E);
+    // OTA Update badge
+    final hasUpdate = ref.watch(hasOtaUpdateProvider);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -87,6 +92,7 @@ class AppBottomNavBar extends StatelessWidget {
                   inactiveIcon: CupertinoIcons.person,
                   primaryColor: primaryColor,
                   inactiveColor: inactiveColor,
+                  showBadge: hasUpdate,
                 ),
               ],
             ),
@@ -104,6 +110,7 @@ class AppBottomNavBar extends StatelessWidget {
     required IconData inactiveIcon,
     required Color primaryColor,
     required Color inactiveColor,
+    bool showBadge = false,
   }) {
     final isSelected = currentIndex == index;
 
@@ -126,10 +133,47 @@ class AppBottomNavBar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  isSelected ? activeIcon : inactiveIcon,
-                  size: 23,
-                  color: isSelected ? primaryColor : inactiveColor,
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(
+                      isSelected ? activeIcon : inactiveIcon,
+                      size: 23,
+                      color: isSelected ? primaryColor : inactiveColor,
+                    ),
+                    if (showBadge)
+                      Positioned(
+                        top: -7,
+                        left: -18,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4.5,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.redAccent.withValues(alpha: 0.35),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: const Text(
+                            'بروزرسانی',
+                            style: TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              height: 1.1,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 3),
                 AnimatedDefaultTextStyle(

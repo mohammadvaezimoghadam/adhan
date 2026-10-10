@@ -1,8 +1,11 @@
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../common/extensions/context_extension.dart';
 import '../../../../common/extensions/int_extension.dart';
+import '../../../../common/constants/app_constants.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import 'surah_header_title_capsule.dart';
 
@@ -25,6 +28,7 @@ class QuranReaderAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onCopySelected;
   final VoidCallback? onShareSelected;
   final VoidCallback? onDictionarySelected;
+  final VoidCallback? onTafakorSelected;
 
   const QuranReaderAppBar({
     super.key,
@@ -42,6 +46,7 @@ class QuranReaderAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.onCopySelected,
     this.onShareSelected,
     this.onDictionarySelected,
+    this.onTafakorSelected,
   });
 
   @override
@@ -193,7 +198,7 @@ class QuranReaderAppBar extends StatelessWidget implements PreferredSizeWidget {
 
         const SizedBox(width: 8),
 
-        // 2. Selected Count Text (Clean & simple, no green box)
+        // 2. Selected Count Text
         Expanded(
           child: Center(
             child: Text(
@@ -210,10 +215,15 @@ class QuranReaderAppBar extends StatelessWidget implements PreferredSizeWidget {
 
         const SizedBox(width: 8),
 
-        // 3. Action Buttons (Bookmark, Dictionary, Share, Copy)
+        // 3. Action Buttons (Tafakor next to count text, followed by Bookmark, Dictionary, Copy with equal 4px spacing)
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            _buildHeaderTafakorButton(
+              context: context,
+              onTap: onTafakorSelected,
+            ),
+            const SizedBox(width: 4),
             _buildIconButton(
               context: context,
               icon: CupertinoIcons.bookmark,
@@ -230,13 +240,6 @@ class QuranReaderAppBar extends StatelessWidget implements PreferredSizeWidget {
             const SizedBox(width: 4),
             _buildIconButton(
               context: context,
-              icon: CupertinoIcons.share,
-              onTap: onShareSelected,
-              tooltip: 'اشتراک‌گذاری',
-            ),
-            const SizedBox(width: 4),
-            _buildIconButton(
-              context: context,
               icon: CupertinoIcons.doc_on_doc,
               onTap: onCopySelected,
               tooltip: 'کپی آیات',
@@ -244,6 +247,83 @@ class QuranReaderAppBar extends StatelessWidget implements PreferredSizeWidget {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildHeaderTafakorButton({
+    required BuildContext context,
+    required VoidCallback? onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final greenColor = isDark ? const Color(0xFF52C498) : AppColors.primary;
+
+    return Container(
+      height: 32,
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: greenColor.withValues(alpha: isDark ? 0.35 : 0.22),
+          width: 0.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.20)
+                : greenColor.withValues(alpha: 0.08),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 1.0, sigmaY: 1.0),
+                  child: Image.asset(
+                    AppConstants.splashBgAsset,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: Container(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.15)
+                      : Colors.white.withValues(alpha: 0.30),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text(
+                  'تفکر',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.primary,
+                    shadows: [
+                      Shadow(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

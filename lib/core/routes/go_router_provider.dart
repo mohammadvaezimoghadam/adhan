@@ -1,3 +1,4 @@
+import '../../features/tafakor/presentation/ui/tafakor_login_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +18,8 @@ import '../../features/smart_device/presentation/ui/smart_device_settings_screen
 import '../../features/splash/presentation/ui/splash_screen.dart';
 import '../../features/subscription/presentation/ui/vip_subscription_screen.dart';
 import '../../features/surah_list/presentation/ui/surah_list_screen.dart';
+import '../../features/study_plan/presentation/ui/create_study_plan_screen.dart';
+import '../../features/study_plan/presentation/ui/study_plans_screen.dart';
 import '../../features/tafsir_manager/presentation/ui/tafsir_reader_screen.dart';
 import 'route_name.dart';
 
@@ -70,6 +73,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/vip-subscription',
         name: vipSubscriptionRoute,
         builder: (context, state) => const VipSubscriptionScreen(),
+      ),
+      GoRoute(
+        path: '/tafakor-login',
+        name: tafakorLoginRoute,
+        builder: (context, state) => const TafakorLoginScreen(),
       ),
       GoRoute(
         path: '/profile',
@@ -148,6 +156,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             initialAyahNumber: initialAyah,
           );
         },
+      ),
+      GoRoute(
+        path: '/study-plans',
+        name: studyPlansRoute,
+        builder: (context, state) => const StudyPlansScreen(),
+      ),
+      GoRoute(
+        path: '/create-study-plan',
+        name: createStudyPlanRoute,
+        builder: (context, state) => const CreateStudyPlanScreen(),
       ),
     ],
   );

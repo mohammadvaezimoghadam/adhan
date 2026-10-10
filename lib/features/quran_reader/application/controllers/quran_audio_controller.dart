@@ -14,6 +14,10 @@ import '../../domain/enums/audio_playback_mode.dart';
 import '../../domain/enums/current_track_type.dart';
 import '../../infrastructure/repositories/reciter_repository.dart';
 import '../../../../core/data/local/preferences/preferences_service_provider.dart';
+import '../../../../core/services/audio/sleep_timer/sleep_timer_condition.dart';
+import '../../../../core/services/audio/sleep_timer/sleep_timer_controller.dart';
+import '../../domain/entities/ayah_entity.dart';
+import '../ayah_service.dart';
 import '../states/quran_audio_state.dart';
 import 'quran_reader_controller.dart';
 import '../../../subscription/application/vip_subscription_controller.dart';
@@ -296,6 +300,49 @@ class QuranAudioController extends Notifier<QuranAudioState> {
     required int totalAyahs,
     required CurrentTrackType targetTrack,
   }) async {
+    // ── Check Sleep Timer Condition ──
+    final sleepTimerNotifier = ref.read(sleepTimerControllerProvider.notifier);
+    final sleepTimerState = ref.read(sleepTimerControllerProvider);
+    if (sleepTimerState.isActive) {
+      final readerState = ref.read(quranReaderControllerProvider);
+      AyahEntity? currentAyahEntity;
+      AyahEntity? nextAyahEntity;
+      if (readerState.currentSurahId == surahId) {
+        currentAyahEntity = readerState.ayahs
+            .where((a) => a.ayahNumber == currentAyah)
+            .firstOrNull;
+        nextAyahEntity = readerState.ayahs
+            .where((a) => a.ayahNumber == currentAyah + 1)
+            .firstOrNull;
+      } else if (sleepTimerState.activeCondition is EndOfHizbCondition) {
+        final res = await ref.read(ayahServiceProvider).getAyahsBySurah(surahId);
+        res.whenSuccess((list) {
+          currentAyahEntity =
+              list.where((a) => a.ayahNumber == currentAyah).firstOrNull;
+          nextAyahEntity =
+              list.where((a) => a.ayahNumber == currentAyah + 1).firstOrNull;
+        });
+      }
+
+      final shouldStop = sleepTimerNotifier.shouldStopAfter(
+        surahId: surahId,
+        ayahNumber: currentAyah,
+        hizb: currentAyahEntity?.hizb,
+        nextHizb: nextAyahEntity?.hizb,
+        isLastAyahInSurah: currentAyah >= totalAyahs,
+      );
+
+      if (shouldStop) {
+        debugPrint(
+          '⏱ [QuranAudioController] Sleep timer boundary reached at Surah $surahId Ayah $currentAyah. Stopping playback.',
+        );
+        sleepTimerNotifier.cancel();
+        _isTransitioningTrack = false;
+        await stop();
+        return;
+      }
+    }
+
     if (!state.isAutoPlayNext || state.isSingleAyahMode || currentAyah >= totalAyahs) {
       _isTransitioningTrack = false;
       await stop();

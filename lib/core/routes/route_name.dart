@@ -14,3 +14,7 @@ const String surahDictionaryRoute = "surah_dictionary";
 const String vipSubscriptionRoute = "vip_subscription";
 const String profileRoute = "profile";
 const String tafsirReaderRoute = "tafsir_reader";
+const String studyPlansRoute = "study_plans";
+const String createStudyPlanRoute = "create_study_plan";
+
+const String tafakorLoginRoute = "tafakor_login";

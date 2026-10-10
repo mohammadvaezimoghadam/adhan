@@ -13,6 +13,7 @@ import '../../application/controllers/quran_reader_controller.dart';
 import '../../domain/entities/ayah_entity.dart';
 import '../../domain/entities/ayah_theme_entity.dart';
 import '../../../quran_home/application/controllers/continue_reading_controller.dart';
+import '../../../study_plan/application/controllers/study_plan_controller.dart';
 import 'ayah_list_item.dart';
 
 class SurahAyahPageView extends ConsumerStatefulWidget {
@@ -42,6 +43,48 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
   final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
   bool _hasScrolledToInitialAyah = false;
   bool _hasCompletedInitialScroll = false;
+
+  void _updateReadingAndPlanProgress() {
+    if (!mounted || !widget.isCurrentPage) return;
+    try {
+      final state = ref.read(quranReaderControllerProvider);
+      if (state.ayahs.isEmpty) return;
+
+      final positions = _itemPositionsListener.itemPositions.value;
+      if (positions.isEmpty) return;
+
+      final visiblePositions = positions.where((p) => p.itemTrailingEdge > 0);
+      if (visiblePositions.isEmpty) return;
+
+      final topIndex = visiblePositions
+          .reduce((min, current) => current.index < min.index ? current : min)
+          .index;
+
+      final furthestIndex = visiblePositions
+          .reduce((max, current) => current.index > max.index ? current : max)
+          .index;
+
+      if (topIndex >= 0 && topIndex < state.ayahs.length) {
+        final topAyah = state.ayahs[topIndex];
+        ref.read(continueReadingControllerProvider.notifier).updateStateInMemory(
+          surahId: widget.surahId,
+          surahName: widget.surahName,
+          ayahNumber: topAyah.ayahNumber,
+          totalAyahs: state.ayahs.length,
+        );
+      }
+
+      if (furthestIndex >= 0 && furthestIndex < state.ayahs.length) {
+        final furthestAyah = state.ayahs[furthestIndex];
+        ref.read(studyPlanControllerProvider.notifier).recordProgress(
+          surahId: widget.surahId,
+          page: furthestAyah.page,
+          juz: furthestAyah.juz,
+          hizb: furthestAyah.hizb,
+        );
+      }
+    } catch (_) {}
+  }
 
   @override
   void didUpdateWidget(SurahAyahPageView oldWidget) {
@@ -187,6 +230,7 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
       if (ref.read(activeItemPositionsListenerProvider) != _itemPositionsListener) {
         ref.read(activeItemPositionsListenerProvider.notifier).setListener(_itemPositionsListener);
       }
+      _updateReadingAndPlanProgress();
     });
 
     final state = ref.watch(quranReaderControllerProvider);
@@ -277,23 +321,40 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
         }
 
         final targetIndex = state.ayahs.indexWhere((a) => a.ayahNumber == next);
-        if (targetIndex != -1 && _itemScrollController.isAttached) {
-          final isAudioPlaying = audioState.status == AudioStatus.playing;
-          final isSuspended = audioState.isAutoScrollSuspended;
+        if (targetIndex != -1) {
+          final currentPlayingAyah = state.ayahs[targetIndex];
+          ref.read(continueReadingControllerProvider.notifier).updateStateInMemory(
+            surahId: widget.surahId,
+            surahName: widget.surahName,
+            ayahNumber: currentPlayingAyah.ayahNumber,
+            totalAyahs: state.ayahs.length,
+          );
 
-          if (isAudioPlaying && isSuspended) return;
+          ref.read(studyPlanControllerProvider.notifier).recordProgress(
+            surahId: widget.surahId,
+            page: currentPlayingAyah.page,
+            juz: currentPlayingAyah.juz,
+            hizb: currentPlayingAyah.hizb,
+          );
 
-          try {
-            if (_itemPositionsListener.itemPositions.value.isNotEmpty) {
-              final alignTarget = (widget.topPadding ?? 0) / MediaQuery.sizeOf(context).height;
-              _itemScrollController.scrollTo(
-                index: targetIndex,
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeOutCubic,
-                alignment: alignTarget,
-              );
-            }
-          } catch (_) {}
+          if (_itemScrollController.isAttached) {
+            final isAudioPlaying = audioState.status == AudioStatus.playing;
+            final isSuspended = audioState.isAutoScrollSuspended;
+
+            if (isAudioPlaying && isSuspended) return;
+
+            try {
+              if (_itemPositionsListener.itemPositions.value.isNotEmpty) {
+                final alignTarget = (widget.topPadding ?? 0) / MediaQuery.sizeOf(context).height;
+                _itemScrollController.scrollTo(
+                  index: targetIndex,
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOutCubic,
+                  alignment: alignTarget,
+                );
+              }
+            } catch (_) {}
+          }
         }
       }
     });
@@ -385,27 +446,12 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
                 }
               }
               
-              // Track reading progress on scroll end
-              if (notification is ScrollEndNotification) {
+              // Track reading progress during and on scroll end
+              if (notification is ScrollEndNotification ||
+                  notification is UserScrollNotification ||
+                  notification is ScrollUpdateNotification) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  final positions = _itemPositionsListener.itemPositions.value;
-                  if (positions.isNotEmpty && state.ayahs.isNotEmpty) {
-                    // Find the item that is currently near the top (index 0)
-                    final firstVisible = positions.reduce((min, position) =>
-                        position.itemLeadingEdge < min.itemLeadingEdge ? position : min);
-                    
-                    final index = firstVisible.index;
-                    if (index >= 0 && index < state.ayahs.length) {
-                      final ayah = state.ayahs[index];
-                      ref.read(continueReadingControllerProvider.notifier).updateStateInMemory(
-                        surahId: widget.surahId,
-                        surahName: widget.surahName,
-                        ayahNumber: ayah.ayahNumber,
-                        totalAyahs: state.ayahs.length,
-                      );
-                    }
-                  }
+                  _updateReadingAndPlanProgress();
                 });
               }
               return false;

@@ -23,6 +23,7 @@ import '../../../../core/routes/route_name.dart';
 import '../../../audio_manager/application/controllers/audio_download_controller.dart';
 import '../../../audio_manager/domain/entities/audio_download_task.dart';
 import '../utils/reciter_download_helper.dart';
+import 'sleep_timer_active_badge.dart';
 
 class AudioPlayerBottomBar extends ConsumerWidget {
   final int surahId;
@@ -201,6 +202,9 @@ class AudioPlayerBottomBar extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // ── Sleep Timer Active Badge ──
+          const SleepTimerActiveBadge(),
+
           // ── 1. Floating Capsule Pill for Re-Sync ("بازگشت به تلاوت • آیه ۲۴") ──
           if (isAutoScrollSuspended && audioStatus != AudioStatus.stopped && currentAyahNumber != null)
             Padding(
@@ -407,6 +411,9 @@ class AudioPlayerBottomBar extends ConsumerWidget {
                                                   ),
 
                                                   const SizedBox(width: 6),
+
+                                                  // Sleep Timer Active Button
+                                                  const SleepTimerPlayerButton(),
 
                                                   // Settings Button (Top Left)
                                                   _buildControlButton(

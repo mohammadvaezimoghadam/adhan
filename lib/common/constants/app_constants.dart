@@ -1,12 +1,30 @@
+import 'package:flutter/foundation.dart';
+
 abstract class AppConstants {
   // Base URLs
   static const String alQuranCloudBaseUrl = 'https://api.alquran.cloud/v1';
   static const String ummahApiBaseUrl = 'https://ummahapi.com/api';
   static const String everyAyahAudioBaseUrl = 'https://www.everyayah.com/data';
+  // Production (سرور اصلی تفکر):
+  static const String tafakorBaseUrl = 'https://tafakormag.ir/api/';
+  // Local Docker (اتصال به داکر لوکال روی پورت 8085):
+  // static String get tafakorBaseUrl {
+  //   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+  //     return 'http://10.0.2.2:8085/api/';
+  //   }
+  //   return 'http://127.0.0.1:8085/api/';
+  // }
+
+  // OTA Patch Server (اتصال به سرور پچر لوکال)
+  static String get patchServerBaseUrl => 'http://192.168.1.102';
+
+  static const String patchAppId = 'quran_app';
 
   // Assets Paths
   static const String ayahCardBgAsset = 'assets/images/ayah_card_bg.png';
   static const String splashBgAsset = 'assets/images/splash_bg.jpg';
+  static const String telegramLogoAsset = 'assets/icons/telegram_logo.png';
+  static const String baleLogoAsset = 'assets/icons/bale_logo.png';
 
   // Network Error Messages - Connection Types
   static const String connectionTimeoutError =
@@ -34,6 +52,14 @@ abstract class AppConstants {
       'خطای داخلی سرور. لطفاً بعداً تلاش کنید.';
   static const String serviceUnavailableError =
       'سرویس در حال حاضر در دسترس نیست.';
+
+  // Tafakor Feature Error Messages
+  static const String tafakorUserFetchError =
+      'خطا در بازیابی اطلاعات کاربر تفکر';
+  static const String tafakorUserNotLoggedIn = 'کاربر وارد نشده است.';
+  static const String tafakorProfileFetchError =
+      'خطا در دریافت اطلاعات پروفایل';
+  static const String tafakorLogoutError = 'خطا در خروج از حساب کاربری تفکر';
 
   // Home & Surah Feature Error Messages
   static const String incompleteAyahDataError =
@@ -102,23 +128,126 @@ abstract class AppConstants {
 
   // Page Navigation Feature
   static const String pageNotFoundError = 'اطلاعاتی برای این صفحه یافت نشد.';
-  static const String invalidScannedCodeError = 'کد اسکن شده معتبر نیست یا صفحه وجود ندارد.';
+  static const String invalidScannedCodeError =
+      'کد اسکن شده معتبر نیست یا صفحه وجود ندارد.';
   static const String telavatNoorPlan = 'طرح تلاوت نور';
   static const String pageNavigationTitle = 'پرش به صفحه';
 
   /// Map of Surah number (1..114) to its traditional historical revelation order (1..114)
   static const Map<int, int> surahRevelationOrderMap = {
-    1: 5, 2: 87, 3: 89, 4: 92, 5: 112, 6: 55, 7: 39, 8: 88, 9: 113, 10: 51,
-    11: 52, 12: 53, 13: 96, 14: 72, 15: 54, 16: 70, 17: 50, 18: 69, 19: 44, 20: 45,
-    21: 73, 22: 103, 23: 74, 24: 102, 25: 42, 26: 47, 27: 48, 28: 49, 29: 85, 30: 84,
-    31: 57, 32: 75, 33: 90, 34: 58, 35: 43, 36: 41, 37: 56, 38: 38, 39: 59, 40: 60,
-    41: 61, 42: 62, 43: 63, 44: 64, 45: 65, 46: 66, 47: 95, 48: 111, 49: 106, 50: 34,
-    51: 67, 52: 76, 53: 23, 54: 37, 55: 97, 56: 46, 57: 94, 58: 105, 59: 101, 60: 91,
-    61: 109, 62: 110, 63: 104, 64: 108, 65: 99, 66: 107, 67: 77, 68: 2, 69: 78, 70: 79,
-    71: 71, 72: 40, 73: 3, 74: 4, 75: 31, 76: 98, 77: 33, 78: 80, 79: 81, 80: 24,
-    81: 7, 82: 82, 83: 86, 84: 83, 85: 27, 86: 36, 87: 8, 88: 68, 89: 10, 90: 35,
-    91: 26, 92: 9, 93: 11, 94: 12, 95: 28, 96: 1, 97: 25, 98: 100, 99: 93, 100: 14,
-    101: 30, 102: 16, 103: 13, 104: 32, 105: 19, 106: 29, 107: 17, 108: 15, 109: 18, 110: 114,
-    111: 6, 112: 22, 113: 20, 114: 21,
+    1: 5,
+    2: 87,
+    3: 89,
+    4: 92,
+    5: 112,
+    6: 55,
+    7: 39,
+    8: 88,
+    9: 113,
+    10: 51,
+    11: 52,
+    12: 53,
+    13: 96,
+    14: 72,
+    15: 54,
+    16: 70,
+    17: 50,
+    18: 69,
+    19: 44,
+    20: 45,
+    21: 73,
+    22: 103,
+    23: 74,
+    24: 102,
+    25: 42,
+    26: 47,
+    27: 48,
+    28: 49,
+    29: 85,
+    30: 84,
+    31: 57,
+    32: 75,
+    33: 90,
+    34: 58,
+    35: 43,
+    36: 41,
+    37: 56,
+    38: 38,
+    39: 59,
+    40: 60,
+    41: 61,
+    42: 62,
+    43: 63,
+    44: 64,
+    45: 65,
+    46: 66,
+    47: 95,
+    48: 111,
+    49: 106,
+    50: 34,
+    51: 67,
+    52: 76,
+    53: 23,
+    54: 37,
+    55: 97,
+    56: 46,
+    57: 94,
+    58: 105,
+    59: 101,
+    60: 91,
+    61: 109,
+    62: 110,
+    63: 104,
+    64: 108,
+    65: 99,
+    66: 107,
+    67: 77,
+    68: 2,
+    69: 78,
+    70: 79,
+    71: 71,
+    72: 40,
+    73: 3,
+    74: 4,
+    75: 31,
+    76: 98,
+    77: 33,
+    78: 80,
+    79: 81,
+    80: 24,
+    81: 7,
+    82: 82,
+    83: 86,
+    84: 83,
+    85: 27,
+    86: 36,
+    87: 8,
+    88: 68,
+    89: 10,
+    90: 35,
+    91: 26,
+    92: 9,
+    93: 11,
+    94: 12,
+    95: 28,
+    96: 1,
+    97: 25,
+    98: 100,
+    99: 93,
+    100: 14,
+    101: 30,
+    102: 16,
+    103: 13,
+    104: 32,
+    105: 19,
+    106: 29,
+    107: 17,
+    108: 15,
+    109: 18,
+    110: 114,
+    111: 6,
+    112: 22,
+    113: 20,
+    114: 21,
   };
 }

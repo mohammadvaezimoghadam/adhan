@@ -20,6 +20,9 @@ import '../widgets/bookmarks_manager_bottom_sheet.dart';
 import '../widgets/pinned_surah_picker_bottom_sheet.dart';
 import '../widgets/quick_access_picker_bottom_sheet.dart';
 import '../widgets/quick_access_slot_card.dart';
+// import '../../../tafakor/application/controllers/tafakor_auth_controller.dart';
+// import '../../../tafakor/presentation/ui/tafakor_login_screen.dart';
+// import '../../../topic_studio/presentation/ui/topic_studio_screen.dart';
 
 class QuickAccessRow extends ConsumerWidget {
   const QuickAccessRow({super.key});
@@ -55,7 +58,7 @@ class QuickAccessRow extends ConsumerWidget {
         break;
 
       case QuickAccessToolType.bookmarks:
-        BookmarksManagerBottomSheet.show(context);
+        BookmarksManagerBottomSheet.show(context, isFullScreen: true);
         break;
 
       case QuickAccessToolType.personalList:
@@ -92,6 +95,10 @@ class QuickAccessRow extends ConsumerWidget {
 
       case QuickAccessToolType.downloads:
         context.pushNamed(downloadHubRoute);
+        break;
+
+      case QuickAccessToolType.topicStudio:
+        // Temporarily commented out
         break;
     }
   }

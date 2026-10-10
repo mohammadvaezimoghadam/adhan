@@ -22,6 +22,10 @@ import '../../application/controllers/tafsir_manager_controller.dart';
 import '../../application/states/tafsir_manager_state.dart';
 import '../../infrastructure/datasources/tafsir_catalog.dart';
 import '../../../quran_reader/presentation/widgets/quran_ornamental_divider.dart';
+import '../../../topic_studio/presentation/widgets/add_to_topic_bottom_sheet.dart';
+import '../../../topic_studio/application/controllers/in_drawer_editor_controller.dart';
+import '../../../topic_studio/domain/entities/topic_block.dart';
+import '../../../topic_studio/presentation/ui/tafakor_editor_screen.dart';
 import '../widgets/tafsir_manager_bottom_sheet.dart';
 
 final tafsirAyahsProvider =
@@ -59,6 +63,7 @@ class _TafsirReaderScreenState extends ConsumerState<TafsirReaderScreen> {
 
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
+  final Map<int, TextSelection> _tafsirSelections = {};
   int _currentFocusedAyahNumber = 1;
 
   @override
@@ -886,6 +891,52 @@ class _TafsirReaderScreenState extends ConsumerState<TafsirReaderScreen> {
                 fontWeight: FontWeight.w600,
                 color: isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B),
               ),
+              contextMenuBuilder: (context, editableTextState) {
+                final List<ContextMenuButtonItem> buttonItems = [];
+
+                // 1. Add Ayah to Topic Studio
+                buttonItems.add(
+                  ContextMenuButtonItem(
+                    label: 'افزودن آیه به دفتر تفکر',
+                    onPressed: () {
+                      editableTextState.hideToolbar();
+                      AddToTopicBottomSheet.show(
+                        context,
+                        surahId: _currentSurahId,
+                        surahName: _currentSurahName,
+                        ayahNumber: ayah.ayahNumber,
+                        arabicText: ayah.arabicText,
+                      );
+                    },
+                  ),
+                );
+
+                // 2. Filter native buttons: only clean Persian 'کپی' and 'انتخاب همه'
+                for (final item in editableTextState.contextMenuButtonItems) {
+                  if (item.type == ContextMenuButtonType.copy) {
+                    buttonItems.add(
+                      ContextMenuButtonItem(
+                        onPressed: item.onPressed,
+                        type: ContextMenuButtonType.copy,
+                        label: 'کپی',
+                      ),
+                    );
+                  } else if (item.type == ContextMenuButtonType.selectAll) {
+                    buttonItems.add(
+                      ContextMenuButtonItem(
+                        onPressed: item.onPressed,
+                        type: ContextMenuButtonType.selectAll,
+                        label: 'انتخاب همه',
+                      ),
+                    );
+                  }
+                }
+
+                return AdaptiveTextSelectionToolbar.buttonItems(
+                  anchors: editableTextState.contextMenuAnchors,
+                  buttonItems: buttonItems,
+                );
+              },
             ),
           ),
 
@@ -909,10 +960,239 @@ class _TafsirReaderScreenState extends ConsumerState<TafsirReaderScreen> {
               ),
               textAlign: TextAlign.justify,
               textDirection: TextDirection.rtl,
+              onSelectionChanged: (selection, cause) {
+                _tafsirSelections[ayah.ayahNumber] = selection;
+              },
+              contextMenuBuilder: (context, editableTextState) {
+                final List<ContextMenuButtonItem> buttonItems = [];
+                final formattedTafsir = (tafsirText != null && tafsirText.trim().isNotEmpty)
+                    ? _formatTafsirDisplayText(tafsirText)
+                    : '';
+
+                // 1. Add Selection to Topic Studio
+                buttonItems.add(
+                  ContextMenuButtonItem(
+                    label: 'افزودن گزیده به دفتر تفکر',
+                    onPressed: () {
+                      String textToSend = '';
+
+                      // 1. Try tracked live selection from onSelectionChanged
+                      final savedSel = _tafsirSelections[ayah.ayahNumber];
+                      if (savedSel != null && !savedSel.isCollapsed && formattedTafsir.isNotEmpty) {
+                        final start = savedSel.start.clamp(0, formattedTafsir.length);
+                        final end = savedSel.end.clamp(0, formattedTafsir.length);
+                        if (start < end) {
+                          textToSend = formattedTafsir.substring(start, end).trim();
+                        }
+                      }
+
+                      // 2. Try current live selection from editableTextState
+                      if (textToSend.isEmpty) {
+                        final val = editableTextState.textEditingValue;
+                        final sel = val.selection;
+                        if (sel.isValid && !sel.isCollapsed) {
+                          final start = sel.start.clamp(0, val.text.length);
+                          final end = sel.end.clamp(0, val.text.length);
+                          if (start < end) {
+                            textToSend = val.text.substring(start, end).trim();
+                          }
+                        }
+                      }
+
+                      // 3. Fallback
+                      if (textToSend.isEmpty) {
+                        textToSend = editableTextState
+                            .textEditingValue
+                            .selection
+                            .textInside(editableTextState.textEditingValue.text)
+                            .trim();
+                      }
+
+                      editableTextState.hideToolbar();
+
+                      if (textToSend.isEmpty) return;
+
+                      AddToTopicBottomSheet.show(
+                        context,
+                        surahId: _currentSurahId,
+                        surahName: _currentSurahName,
+                        ayahNumber: ayah.ayahNumber,
+                        tafsirText: textToSend,
+                        sourceTitle: 'تفسیر',
+                      );
+                    },
+                  ),
+                );
+
+                // 1.2 Send Selection directly to Tafakor Platform
+                buttonItems.add(
+                  ContextMenuButtonItem(
+                    label: 'ارسال گزیده به پلتفرم تفکر',
+                    onPressed: () {
+                      String textToSend = '';
+                      final savedSel = _tafsirSelections[ayah.ayahNumber];
+                      if (savedSel != null && !savedSel.isCollapsed && formattedTafsir.isNotEmpty) {
+                        final start = savedSel.start.clamp(0, formattedTafsir.length);
+                        final end = savedSel.end.clamp(0, formattedTafsir.length);
+                        if (start < end) {
+                          textToSend = formattedTafsir.substring(start, end).trim();
+                        }
+                      }
+                      if (textToSend.isEmpty) {
+                        final val = editableTextState.textEditingValue;
+                        final sel = val.selection;
+                        if (sel.isValid && !sel.isCollapsed) {
+                          final start = sel.start.clamp(0, val.text.length);
+                          final end = sel.end.clamp(0, val.text.length);
+                          if (start < end) {
+                            textToSend = val.text.substring(start, end).trim();
+                          }
+                        }
+                      }
+                      if (textToSend.isEmpty) {
+                        textToSend = editableTextState
+                            .textEditingValue
+                            .selection
+                            .textInside(editableTextState.textEditingValue.text)
+                            .trim();
+                      }
+                      editableTextState.hideToolbar();
+                      if (textToSend.isEmpty) return;
+
+                      HapticFeedback.lightImpact();
+                      final blocks = [
+                        TopicBlock.create(
+                          type: TopicBlockType.ayah,
+                          content: ayah.arabicText,
+                          surahId: _currentSurahId,
+                          surahName: _currentSurahName,
+                          ayahNumber: ayah.ayahNumber,
+                        ),
+                        TopicBlock.create(
+                          type: TopicBlockType.tafsir,
+                          content: textToSend,
+                          surahId: _currentSurahId,
+                          surahName: _currentSurahName,
+                          ayahNumber: ayah.ayahNumber,
+                          sourceTitle: 'تفسیر',
+                        ),
+                      ];
+                      ref
+                          .read(inDrawerEditorControllerProvider.notifier)
+                          .setBlocks(blocks);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const TafakorEditorScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                );
+
+                // 2. Filter native buttons: only clean Persian 'کپی' and 'انتخاب همه'
+                for (final item in editableTextState.contextMenuButtonItems) {
+                  if (item.type == ContextMenuButtonType.copy) {
+                    buttonItems.add(
+                      ContextMenuButtonItem(
+                        onPressed: item.onPressed,
+                        type: ContextMenuButtonType.copy,
+                        label: 'کپی',
+                      ),
+                    );
+                  } else if (item.type == ContextMenuButtonType.selectAll) {
+                    buttonItems.add(
+                      ContextMenuButtonItem(
+                        onPressed: item.onPressed,
+                        type: ContextMenuButtonType.selectAll,
+                        label: 'انتخاب همه',
+                      ),
+                    );
+                  }
+                }
+
+                return AdaptiveTextSelectionToolbar.buttonItems(
+                  anchors: editableTextState.contextMenuAnchors,
+                  buttonItems: buttonItems,
+                );
+              },
             ),
           ),
 
-          18.vSpace,
+          if (tafsirText != null && tafsirText.trim().isNotEmpty) ...[
+            6.vSpace,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: isDark ? Colors.white60 : Colors.black54,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
+                    icon: const Icon(CupertinoIcons.square_pencil, size: 14),
+                    label: const Text(
+                      'افزودن به موضوعات',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      AddToTopicBottomSheet.show(
+                        context,
+                        surahId: _currentSurahId,
+                        surahName: _currentSurahName,
+                        ayahNumber: ayah.ayahNumber,
+                        tafsirText: _formatTafsirDisplayText(tafsirText),
+                        sourceTitle: 'تفسیر',
+                      );
+                    },
+                  ),
+                  8.hSpace,
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: colorScheme.primary,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
+                    icon: const Icon(CupertinoIcons.paperplane, size: 14),
+                    label: const Text(
+                      'ارسال به پلتفرم تفکر',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      final blocks = [
+                        TopicBlock.create(
+                          type: TopicBlockType.ayah,
+                          content: ayah.arabicText,
+                          surahId: _currentSurahId,
+                          surahName: _currentSurahName,
+                          ayahNumber: ayah.ayahNumber,
+                        ),
+                        TopicBlock.create(
+                          type: TopicBlockType.tafsir,
+                          content: _formatTafsirDisplayText(tafsirText),
+                          surahId: _currentSurahId,
+                          surahName: _currentSurahName,
+                          ayahNumber: ayah.ayahNumber,
+                          sourceTitle: 'تفسیر',
+                        ),
+                      ];
+                      ref
+                          .read(inDrawerEditorControllerProvider.notifier)
+                          .setBlocks(blocks);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const TafakorEditorScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          14.vSpace,
 
           // 4. Divider between Ayahs (Islamic Ornamental Divider)
           if (!isLast)

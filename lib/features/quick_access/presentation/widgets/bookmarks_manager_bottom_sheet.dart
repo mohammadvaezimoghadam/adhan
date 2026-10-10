@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,14 +23,28 @@ import '../../../quran_reader/application/controllers/quran_display_settings_con
 
 /// Luxury bottom sheet for managing saved bookmarks with tabs for All Bookmarks and Saved Ayahs.
 class BookmarksManagerBottomSheet extends ConsumerStatefulWidget {
-  const BookmarksManagerBottomSheet({super.key});
+  final bool isFullScreen;
+  const BookmarksManagerBottomSheet({
+    super.key,
+    this.isFullScreen = false,
+  });
 
-  static Future<void> show(BuildContext context) {
+  static Future<void> show(BuildContext context, {bool isFullScreen = false}) {
+    if (isFullScreen) {
+      return Navigator.of(context).push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (context) =>
+              const BookmarksManagerBottomSheet(isFullScreen: true),
+        ),
+      );
+    }
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const BookmarksManagerBottomSheet(),
+      builder: (context) =>
+          const BookmarksManagerBottomSheet(isFullScreen: false),
     );
   }
 
@@ -183,28 +196,13 @@ class _BookmarksManagerBottomSheetState
     final screenHeight = MediaQuery.sizeOf(context).height;
     final sheetHeight = (screenHeight * 0.72).clamp(450.0, 680.0);
 
-    return Container(
-      height: sheetHeight,
-      decoration: BoxDecoration(
-        color: sheetBg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            // 1. Drag Handle & Header
-            AppModalHeader(
-              showDragHandle: true,
-              bottomSpacing: 12.0,
-              title: 'نشانه‌های ذخیره‌شده',
+    final mainContent = Column(
+      children: [
+        // 1. Drag Handle & Header
+        AppModalHeader(
+          showDragHandle: !widget.isFullScreen,
+          bottomSpacing: 12.0,
+          title: 'نشانه‌های ذخیره‌شده',
               leadingActionWidth: 72.0,
               leadingAction: bookmarks.isNotEmpty
                   ? TextButton(
@@ -309,7 +307,33 @@ class _BookmarksManagerBottomSheetState
                     ),
             ),
           ],
+        );
+
+    if (widget.isFullScreen) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: SafeArea(
+          child: mainContent,
         ),
+      );
+    }
+
+    return Container(
+      height: sheetHeight,
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: mainContent,
       ),
     );
   }
@@ -409,20 +433,7 @@ class _BookmarksManagerBottomSheetState
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          IconButton(
-            tooltip: 'ویرایش نشانک',
-            icon: Icon(
-              hasNote
-                  ? CupertinoIcons.square_pencil_fill
-                  : CupertinoIcons.square_pencil,
-              size: 16,
-              color: hasNote
-                  ? primaryColor
-                  : (isDark ? Colors.white54 : Colors.black45),
-            ),
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(),
-            splashRadius: 16,
+          TextButton(
             onPressed: () {
               HapticFeedback.lightImpact();
               AyahBookmarkEditorBottomSheet.show(
@@ -438,6 +449,23 @@ class _BookmarksManagerBottomSheetState
                 isAyahBookmark: item.isAyahBookmark,
               );
             },
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              visualDensity: VisualDensity.compact,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: hasNote
+                  ? primaryColor
+                  : (isDark ? Colors.white70 : Colors.black54),
+            ),
+            child: const Text(
+              'ویرایش',
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
           8.hSpace,
           TextButton(
@@ -599,45 +627,63 @@ class _BookmarksManagerBottomSheetState
               if (hasNote) ...[
                 4.vSpace,
                 Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 8.0, top: 2.0),
-                  child: GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      AyahBookmarkEditorBottomSheet.show(
-                        context,
-                        surahId: item.surahId,
-                        surahName: item.surahName,
-                        ayahNumber: item.ayahNumber,
-                        totalAyahs: item.totalAyahs,
-                        arabicText: item.arabicText,
-                        initialNote: item.note,
-                        initialLabelIds: item.labelIds,
-                        isAlreadyBookmarked: true,
-                        isAyahBookmark: item.isAyahBookmark,
-                      );
-                    },
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'یادداشت: ',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white70 : Colors.black87,
+                  padding: const EdgeInsetsDirectional.only(start: 4.0, top: 2.0),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        AyahBookmarkEditorBottomSheet.show(
+                          context,
+                          surahId: item.surahId,
+                          surahName: item.surahName,
+                          ayahNumber: item.ayahNumber,
+                          totalAyahs: item.totalAyahs,
+                          arabicText: item.arabicText,
+                          initialNote: item.note,
+                          initialLabelIds: item.labelIds,
+                          isAlreadyBookmarked: true,
+                          isAyahBookmark: item.isAyahBookmark,
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4.0,
+                          vertical: 3.0,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: 'یادداشت: ',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark
+                                            ? Colors.white70
+                                            : Colors.black87,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: item.note!,
+                                    ),
+                                  ],
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w400,
+                                  color: isDark ? Colors.white60 : Colors.black54,
+                                ),
+                              ),
                             ),
-                          ),
-                          TextSpan(
-                            text: item.note!,
-                          ),
-                        ],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: isDark ? Colors.white60 : Colors.black54,
+                          ],
+                        ),
                       ),
                     ),
                   ),

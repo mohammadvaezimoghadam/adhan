@@ -49,7 +49,7 @@ class SurahListQuickActions extends ConsumerWidget {
               textColor: colorScheme.onSurface,
               onTap: () {
                 onBeforeNavigation?.call();
-                BookmarksManagerBottomSheet.show(context);
+                BookmarksManagerBottomSheet.show(context, isFullScreen: true);
               },
             ),
           ),

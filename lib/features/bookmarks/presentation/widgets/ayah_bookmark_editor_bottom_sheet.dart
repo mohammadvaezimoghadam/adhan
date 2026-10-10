@@ -127,6 +127,8 @@ class _AyahBookmarkEditorBottomSheetState
     }
   }
 
+
+
   Future<void> _saveBookmark() async {
     HapticFeedback.lightImpact();
     final noteText = widget.isAyahBookmark ? _noteController.text.trim() : '';
@@ -276,7 +278,7 @@ class _AyahBookmarkEditorBottomSheetState
                                 Padding(
                                   padding: const EdgeInsets.only(
                                     right: 12,
-                                    left: 36,
+                                    left: 142,
                                     top: 10,
                                     bottom: 10,
                                   ),
@@ -313,22 +315,29 @@ class _AyahBookmarkEditorBottomSheetState
                                       if (value.text.trim().isEmpty) {
                                         return const SizedBox.shrink();
                                       }
-                                      return IconButton(
-                                        icon: const Icon(
-                                          CupertinoIcons.doc_on_doc,
-                                          size: 16,
-                                        ),
-                                        color: isDark
-                                            ? Colors.white60
-                                            : Colors.black54,
-                                        splashRadius: 16,
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(
-                                          minWidth: 28,
-                                          minHeight: 28,
-                                        ),
-                                        tooltip: 'کپی متن',
-                                        onPressed: _copyNote,
+                                      return Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+
+                                          // 2. Copy note text
+                                          IconButton(
+                                            icon: const Icon(
+                                              CupertinoIcons.doc_on_doc,
+                                              size: 16,
+                                            ),
+                                            color: isDark
+                                                ? Colors.white60
+                                                : Colors.black54,
+                                            splashRadius: 16,
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(
+                                              minWidth: 28,
+                                              minHeight: 28,
+                                            ),
+                                            tooltip: 'کپی متن',
+                                            onPressed: _copyNote,
+                                          ),
+                                        ],
                                       );
                                     },
                                   ),

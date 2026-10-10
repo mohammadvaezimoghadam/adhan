@@ -88,16 +88,20 @@ class SearchRecentHistoryView extends StatelessWidget {
                 color: colorScheme.primary,
               ),
               8.hSpace,
-              Text(
-                'جستجوهای اخیر',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
+              Expanded(
+                child: Text(
+                  'جستجوهای اخیر',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
               ),
-              const Spacer(),
+              8.hSpace,
               GestureDetector(
                 onTap: () {
                   HapticFeedback.lightImpact();
@@ -105,6 +109,7 @@ class SearchRecentHistoryView extends StatelessWidget {
                 },
                 child: Text(
                   'پاک کردن همه',
+                  maxLines: 1,
                   style: TextStyle(
                     fontFamily: AppTypography.fontFamily,
                     fontSize: 11.5,
@@ -116,70 +121,84 @@ class SearchRecentHistoryView extends StatelessWidget {
             ],
           ),
           12.vSpace,
-          Wrap(
-            spacing: 8.0,
-            runSpacing: 8.0,
-            children: recentSearches.map((term) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: colors.cardBackground,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: colors.cardBorder,
-                    width: 0.8,
-                  ),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      onSearchSelected(term);
-                    },
-                    borderRadius: BorderRadius.circular(20),
-                    child: Padding(
-                      padding: const EdgeInsets.only(
-                        left: 8.0,
-                        right: 12.0,
-                        top: 5.0,
-                        bottom: 5.0,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return Wrap(
+                spacing: 8.0,
+                runSpacing: 8.0,
+                children: recentSearches.map((term) {
+                  return ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth,
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: colors.cardBackground,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: colors.cardBorder,
+                          width: 0.8,
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            term,
-                            style: TextStyle(
-                              fontFamily: AppTypography.fontFamily,
-                              fontSize: 12.5,
-                              color: colorScheme.onSurface,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            onSearchSelected(term);
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Padding(
+                            padding: const EdgeInsets.only(
+                              left: 8.0,
+                              right: 12.0,
+                              top: 5.0,
+                              bottom: 5.0,
                             ),
-                          ),
-                          6.hSpace,
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () {
-                              HapticFeedback.lightImpact();
-                              onRemoveSearch(term);
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.all(3.0),
-                              child: Icon(
-                                CupertinoIcons.xmark,
-                                size: 12,
-                                color: colorScheme.onSurfaceVariant.withValues(
-                                  alpha: 0.6,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    term,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontFamily: AppTypography.fontFamily,
+                                      fontSize: 12.5,
+                                      color: colorScheme.onSurface,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                6.hSpace,
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () {
+                                    HapticFeedback.lightImpact();
+                                    onRemoveSearch(term);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(3.0),
+                                    child: Icon(
+                                      CupertinoIcons.xmark,
+                                      size: 12,
+                                      color: colorScheme.onSurfaceVariant
+                                          .withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                }).toList(),
               );
-            }).toList(),
+            },
           ),
         ],
       ),

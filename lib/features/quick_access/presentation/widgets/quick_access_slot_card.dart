@@ -1,11 +1,14 @@
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../common/constants/app_constants.dart';
 import '../../../../common/extensions/context_extension.dart';
 import '../../../../common/extensions/size_extension.dart';
 import '../../../../common/extensions/string_extension.dart';
 import '../../../../common/extensions/surah_name_extension.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../domain/entities/quick_access_tool_entity.dart';
@@ -124,6 +127,7 @@ class _QuickAccessSlotCardState extends ConsumerState<QuickAccessSlotCard>
     final colorScheme = context.colorScheme;
 
     final isEmpty = widget.tool == null;
+    final isTopicStudio = widget.tool?.type == QuickAccessToolType.topicStudio;
 
     final cardBgColor = isDark
         ? (isEmpty ? Colors.white.withValues(alpha: 0.025) : colors.cardBackground)
@@ -150,13 +154,30 @@ class _QuickAccessSlotCardState extends ConsumerState<QuickAccessSlotCard>
           AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             height: 84,
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: cardBgColor,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: cardBorderColor,
+                color: isTopicStudio
+                    ? (isDark
+                        ? Colors.white.withValues(alpha: 0.20)
+                        : colorScheme.primary.withValues(alpha: 0.35))
+                    : cardBorderColor,
                 width: 0.8,
               ),
+              image: isTopicStudio
+                  ? DecorationImage(
+                      image: const AssetImage(AppConstants.splashBgAsset),
+                      fit: BoxFit.cover,
+                      colorFilter: isDark
+                          ? ColorFilter.mode(
+                              Colors.black.withValues(alpha: 0.50),
+                              BlendMode.darken,
+                            )
+                          : null,
+                    )
+                  : null,
               boxShadow: (!isDark && !isEmpty)
                   ? [
                       BoxShadow(
@@ -259,6 +280,66 @@ class _QuickAccessSlotCardState extends ConsumerState<QuickAccessSlotCard>
                               ),
                             ),
                           ],
+                        ] else if (isTopicStudio) ...[
+                          // Topic Studio: Soft feathered glow fading seamlessly into transparency (like splash screen)
+                          SizedBox(
+                            height: 24,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                ImageFiltered(
+                                  imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 6),
+                                  child: Container(
+                                    width: 48,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(10),
+                                      color: Colors.white.withValues(alpha: 0.92),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.white.withValues(alpha: 0.90),
+                                          blurRadius: 10,
+                                          spreadRadius: 3,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  'تفکر',
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  style: const TextStyle(
+                                    fontFamily: AppTypography.fontFamily,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.primary,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          6.vSpace,
+                          Text(
+                            widget.tool!.title,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.95)
+                                  : const Color(0xFF2C2A29),
+                              shadows: [
+                                Shadow(
+                                  color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.8),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
                         ] else ...[
                           Icon(
                             widget.tool!.iconData ?? CupertinoIcons.star,

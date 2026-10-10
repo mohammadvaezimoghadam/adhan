@@ -1,11 +1,15 @@
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../common/constants/app_constants.dart';
 import '../../../../common/extensions/context_extension.dart';
 import '../../../../common/extensions/size_extension.dart';
 import '../../../../common/widgets/app_modal_header.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimens.dart';
+import '../../../../core/theme/app_typography.dart';
 import '../../application/controllers/quick_access_controller.dart';
 import '../../domain/entities/quick_access_tool_entity.dart';
 import 'pinned_surah_picker_bottom_sheet.dart';
@@ -72,6 +76,7 @@ class QuickAccessPickerBottomSheet extends ConsumerWidget {
                 separatorBuilder: (context, index) => 6.vSpace,
                 itemBuilder: (context, index) {
                   final tool = availableTools[index];
+                  final isTopic = tool.type == QuickAccessToolType.topicStudio;
 
                   return InkWell(
                     onTap: () async {
@@ -96,16 +101,64 @@ class QuickAccessPickerBottomSheet extends ConsumerWidget {
                           Container(
                             width: 44,
                             height: 44,
+                            clipBehavior: Clip.antiAlias,
                             decoration: BoxDecoration(
                               color: colorScheme.primary
                                   .withValues(alpha: isDark ? 0.25 : 0.12),
                               borderRadius: BorderRadius.circular(AppDimens.radiusDefault),
+                              image: isTopic
+                                  ? DecorationImage(
+                                      image: const AssetImage(AppConstants.splashBgAsset),
+                                      fit: BoxFit.cover,
+                                      colorFilter: isDark
+                                          ? ColorFilter.mode(
+                                              Colors.black.withValues(alpha: 0.45),
+                                              BlendMode.darken,
+                                            )
+                                          : null,
+                                    )
+                                  : null,
                             ),
-                            child: Icon(
-                              tool.iconData,
-                              color: colorScheme.primary,
-                              size: 22,
-                            ),
+                            child: isTopic
+                                ? Center(
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        ImageFiltered(
+                                          imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 5),
+                                          child: Container(
+                                            width: 32,
+                                            height: 16,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(8),
+                                              color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.90),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.90),
+                                                  blurRadius: 8,
+                                                  spreadRadius: 2,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          'تفکر',
+                                          style: TextStyle(
+                                            fontFamily: AppTypography.fontFamily,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w900,
+                                            color: isDark ? Colors.white : AppColors.primary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : Icon(
+                                    tool.iconData,
+                                    color: colorScheme.primary,
+                                    size: 22,
+                                  ),
                           ),
                           14.hSpace,
                           Expanded(

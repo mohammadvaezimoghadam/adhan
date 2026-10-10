@@ -1,3 +1,7 @@
+import '../../../../common/extensions/int_extension.dart';
+import '../../../topic_studio/application/controllers/in_drawer_editor_controller.dart';
+import '../../../topic_studio/domain/entities/topic_drag_data.dart';
+import '../../../topic_studio/presentation/ui/tafakor_editor_screen.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +30,7 @@ import '../../../mini_audio_player/presentation/widgets/mini_audio_player_bar.da
 import '../widgets/audio_player_bottom_bar.dart';
 import '../widgets/quran_info_bar.dart';
 import '../widgets/quick_settings_drawer.dart';
+import '../widgets/sleep_timer_active_badge.dart';
 import '../widgets/surah_ayah_page_view.dart';
 import '../widgets/word_by_word_bottom_sheet.dart';
 import '../../domain/entities/ayah_theme_entity.dart';
@@ -555,6 +560,35 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                     surahName: currentSurahName,
                                   );
                             },
+                            onTafakorSelected: () {
+                              HapticFeedback.lightImpact();
+                              final currentSelected = ref.read(selectedAyahActionProvider);
+                              final allAyahs = ref.read(quranReaderControllerProvider).ayahs;
+                              final targetAyahs = allAyahs
+                                  .where((a) => currentSelected.contains(a.ayahNumber))
+                                  .toList();
+                              targetAyahs.sort((a, b) => a.ayahNumber.compareTo(b.ayahNumber));
+
+                              final removeBrackets = ref
+                                  .read(quranDisplaySettingsControllerProvider)
+                                  .removeTranslationBrackets;
+
+                              final dragData = TopicDragData(
+                                ayahs: targetAyahs,
+                                surahName: currentSurahName,
+                                removeBrackets: removeBrackets,
+                              );
+                              final blocks = dragData.toBlocks();
+
+                              ref.read(inDrawerEditorControllerProvider.notifier).setBlocks(blocks);
+                              ref.read(selectedAyahActionProvider.notifier).clearSelection();
+
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const TafakorEditorScreen(),
+                                ),
+                              );
+                            },
                             onDictionarySelected: () {
                               final selectedSet = ref.read(selectedAyahActionProvider);
                               if (selectedSet.isNotEmpty) {
@@ -590,13 +624,17 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                  ref.read(selectedAyahActionProvider.notifier).clearSelection();
                                }
 
-                               // If bookmarked from the reader header during normal reading without selection,
-                               // it is a page/reading bookmark (isAyahBookmark: false) so it appears under 'نشانک صفحه'.
-                               // If an ayah is explicitly selected, it is an ayah bookmark (isAyahBookmark: true).
-                               // If it already exists, preserve its existing type.
-                               final isAyahBookmark = existingBookmark != null
-                                   ? existingBookmark.isAyahBookmark
-                                   : hasSelection;
+                               if (existingBookmark != null) {
+                                 HapticFeedback.lightImpact();
+                                 ref.read(bookmarksControllerProvider.notifier).removeBookmark(currentSurahId, ayahNum);
+                                 AppSnackBar.showSuccess(
+                                   context,
+                                   'آیه ${ayahNum.toPersianDigit()} سوره $currentSurahName از نشانه‌ها حذف شد.',
+                                 );
+                                 return;
+                               }
+
+                               final isAyahBookmark = hasSelection;
 
                                HapticFeedback.lightImpact();
                                AyahBookmarkEditorBottomSheet.show(
@@ -606,9 +644,9 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                  ayahNumber: ayahNum,
                                  totalAyahs: totalAyahs,
                                  arabicText: ayahEntity?.arabicText,
-                                 initialNote: existingBookmark?.note,
-                                 initialLabelIds: existingBookmark?.labelIds ?? const [],
-                                 isAlreadyBookmarked: existingBookmark != null,
+                                 initialNote: null,
+                                 initialLabelIds: const [],
+                                 isAlreadyBookmarked: false,
                                  isAyahBookmark: isAyahBookmark,
                                );
                              },
@@ -621,6 +659,8 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                  }
                                } else if (value == 'settings') {
                                  QuickSettingsDrawer.show(context);
+                               } else if (value == 'sleep_timer') {
+                                 SleepTimerDialog.show(context);
                                } else if (value == 'bookmarks') {
                                  BookmarksManagerBottomSheet.show(context);
                                } else if (value == 'toggle_brackets') {
@@ -629,7 +669,7 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                  notifier.recordInitialState();
                                  notifier.toggleRemoveTranslationBrackets(!current);
                                  notifier.saveSettingsIfChanged();
-                               }
+                                }
                              },
                              menuItemBuilder: (context) {
                                final removeBrackets = ref.watch(quranDisplaySettingsControllerProvider.select((s) => s.removeTranslationBrackets));
@@ -643,6 +683,23 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                        SizedBox(width: 8),
                                        Text(
                                          'تنظیمات نمایش',
+                                         style: TextStyle(
+                                           fontFamily: AppTypography.fontFamily,
+                                           fontSize: 13,
+                                         ),
+                                       ),
+                                     ],
+                                   ),
+                                 ),
+                                 const PopupMenuItem<String>(
+                                   value: 'sleep_timer',
+                                   child: Row(
+                                     mainAxisSize: MainAxisSize.min,
+                                     children: [
+                                       Icon(CupertinoIcons.timer, size: 18),
+                                       SizedBox(width: 8),
+                                       Text(
+                                         'تایمر خواب تلاوت',
                                          style: TextStyle(
                                            fontFamily: AppTypography.fontFamily,
                                            fontSize: 13,
@@ -817,6 +874,8 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                 ),
               ),
             ),
+
+
         ],
       ),
     ),

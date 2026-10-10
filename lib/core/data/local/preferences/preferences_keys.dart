@@ -20,4 +20,8 @@ abstract final class PreferencesKeys {
   // Selected Preferences Keys
   static const String selectedReciterId = 'quran_selected_reciter_id';
   static const String selectedTranslationId = 'quran_selected_translation_id';
+
+  // Topic Studio Mini Drawer
+  static const String topicMiniDrawerEnabled = 'topic_mini_drawer_enabled';
+  static const String topicMiniDrawerHideCompleted = 'topic_mini_drawer_hide_completed';
 }
