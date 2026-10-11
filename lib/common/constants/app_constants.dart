@@ -15,8 +15,8 @@ abstract class AppConstants {
   //   return 'http://127.0.0.1:8085/api/';
   // }
 
-  // OTA Patch Server (اتصال به سرور پچر لوکال)
-  static String get patchServerBaseUrl => 'http://192.168.1.102';
+  // OTA Patch Server (اتصال به سرور پچر VPS)
+  static String get patchServerBaseUrl => 'http://5.22.203.61';
 
   static const String patchAppId = 'quran_app';
 
