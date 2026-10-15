@@ -4,6 +4,7 @@ enum OtaStatus {
   idle,
   checking,
   updateAvailable,
+  storeUpdateRequired,
   downloading,
   verifying,
   finalizing,
@@ -21,8 +22,14 @@ class OtaUpdateState {
   final String? currentPatchVersion;
   final int? currentBuildNumber;
   final String? errorMessage;
-
   final String? lastReleaseNotes;
+
+  // Fields for STORE_UPDATE_REQUIRED scenario
+  final String? storeUrl;
+  final String? storeWebUrl;
+  final String? storeMessage;
+  final String? storeLatestVersion;
+  final bool storeIsMandatory;
 
   const OtaUpdateState({
     this.status = OtaStatus.idle,
@@ -34,6 +41,11 @@ class OtaUpdateState {
     this.currentBuildNumber,
     this.errorMessage,
     this.lastReleaseNotes,
+    this.storeUrl,
+    this.storeWebUrl,
+    this.storeMessage,
+    this.storeLatestVersion,
+    this.storeIsMandatory = false,
   });
 
   bool get hasUpdate =>
@@ -51,6 +63,8 @@ class OtaUpdateState {
 
   bool get isReadyToRestart => status == OtaStatus.readyToRestart;
 
+  bool get isStoreUpdateRequired => status == OtaStatus.storeUpdateRequired;
+
   OtaUpdateState copyWith({
     OtaStatus? status,
     OtaPatch? patch,
@@ -61,6 +75,11 @@ class OtaUpdateState {
     int? currentBuildNumber,
     String? errorMessage,
     String? lastReleaseNotes,
+    String? storeUrl,
+    String? storeWebUrl,
+    String? storeMessage,
+    String? storeLatestVersion,
+    bool? storeIsMandatory,
   }) {
     return OtaUpdateState(
       status: status ?? this.status,
@@ -72,6 +91,11 @@ class OtaUpdateState {
       currentBuildNumber: currentBuildNumber ?? this.currentBuildNumber,
       errorMessage: errorMessage,
       lastReleaseNotes: lastReleaseNotes ?? this.lastReleaseNotes,
+      storeUrl: storeUrl ?? this.storeUrl,
+      storeWebUrl: storeWebUrl ?? this.storeWebUrl,
+      storeMessage: storeMessage ?? this.storeMessage,
+      storeLatestVersion: storeLatestVersion ?? this.storeLatestVersion,
+      storeIsMandatory: storeIsMandatory ?? this.storeIsMandatory,
     );
   }
 }

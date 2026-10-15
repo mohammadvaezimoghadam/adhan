@@ -1,4 +1,5 @@
-import 'package:flutter/cupertino.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,18 +9,21 @@ import '../../../../common/extensions/int_extension.dart';
 import '../../../../common/extensions/size_extension.dart';
 import '../../../../common/extensions/string_extension.dart';
 import '../../../../common/extensions/surah_name_extension.dart';
+import '../../../../common/widgets/app_modal_header.dart';
 import '../../../../common/widgets/app_snackbar.dart';
 import '../../../../core/services/audio/sleep_timer/sleep_timer_condition.dart';
 import '../../../../core/services/audio/sleep_timer/sleep_timer_controller.dart';
 import '../../../../core/services/audio/sleep_timer/sleep_timer_state.dart';
+import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../quran_reader/application/controllers/quran_audio_controller.dart';
 import '../../../quran_reader/application/controllers/quran_reader_controller.dart';
 import '../../../quran_reader/domain/entities/ayah_entity.dart';
 import '../../../surah_list/infrastructure/datasources/static_surahs_data.dart';
 
-/// Minimal, serene Sleep Timer screen inspired by Spotify & Castbox.
-/// Provides instant one-tap activation, zero clutter, and beautiful typography.
+/// Serene, luxury Sleep Timer screen strictly aligned with the app's sacred theme.
+/// Provides one-tap minute presets, Quranic boundary stops, active hero countdown,
+/// and infrastructure for future intelligent sleep features (Fade-out, Shake to extend).
 class SleepTimerScreen extends ConsumerStatefulWidget {
   final int? initialSurahId;
   final int? initialAyahNumber;
@@ -30,21 +34,30 @@ class SleepTimerScreen extends ConsumerStatefulWidget {
     this.initialAyahNumber,
   });
 
-  /// Navigates to the Sleep Timer screen.
-  static Future<void> open(
+  /// Opens the Sleep Timer bottom sheet modal.
+  static Future<void> show(
     BuildContext context, {
     int? initialSurahId,
     int? initialAyahNumber,
   }) {
-    return Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SleepTimerScreen(
-          initialSurahId: initialSurahId,
-          initialAyahNumber: initialAyahNumber,
-        ),
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => SleepTimerScreen(
+        initialSurahId: initialSurahId,
+        initialAyahNumber: initialAyahNumber,
       ),
     );
   }
+
+  static Future<void> open(
+    BuildContext context, {
+    int? initialSurahId,
+    int? initialAyahNumber,
+  }) => show(context, initialSurahId: initialSurahId, initialAyahNumber: initialAyahNumber);
 
   @override
   ConsumerState<SleepTimerScreen> createState() => _SleepTimerScreenState();
@@ -52,6 +65,60 @@ class SleepTimerScreen extends ConsumerStatefulWidget {
 
 class _SleepTimerScreenState extends ConsumerState<SleepTimerScreen> {
   static const List<int> _presetMinutes = [5, 10, 15, 30, 45, 60];
+  double _sliderMinutes = 0.0;
+  Timer? _uiCountdownTimer;
+  int _remainingSeconds = 0;
+  bool _isWindupActive = false;
+  bool _isUserDragging = false;
+  bool _isTimerConfiguring = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final timerState = ref.read(sleepTimerControllerProvider);
+      if (timerState.isActive) {
+        if (timerState.activeCondition is TimerCondition) {
+          final rem = timerState.remainingTime ?? Duration.zero;
+          if (rem > Duration.zero) {
+            setState(() {
+              _isTimerConfiguring = true;
+              _remainingSeconds = rem.inSeconds;
+              _sliderMinutes = (rem.inSeconds / 60.0).clamp(0.0, 120.0);
+              _isWindupActive = true;
+            });
+            _startWindupCountdown();
+          }
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _uiCountdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startWindupCountdown() {
+    _uiCountdownTimer?.cancel();
+    _uiCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_remainingSeconds > 0) {
+        setState(() {
+          _remainingSeconds--;
+          _sliderMinutes = (_remainingSeconds / 60.0).clamp(0.0, 120.0);
+        });
+      } else {
+        timer.cancel();
+        _cancelTimer(showSnackbar: false);
+      }
+    });
+  }
 
   void _activateDurationTimer(int minutes) {
     HapticFeedback.mediumImpact();
@@ -62,6 +129,15 @@ class _SleepTimerScreenState extends ConsumerState<SleepTimerScreen> {
     );
 
     ref.read(sleepTimerControllerProvider.notifier).activate(condition);
+
+    setState(() {
+      _isTimerConfiguring = true;
+      _remainingSeconds = minutes * 60;
+      _sliderMinutes = minutes.toDouble().clamp(0.0, 120.0);
+      _isWindupActive = true;
+      _isUserDragging = false;
+    });
+    _startWindupCountdown();
 
     if (mounted) {
       AppSnackBar.showSuccess(
@@ -75,6 +151,15 @@ class _SleepTimerScreenState extends ConsumerState<SleepTimerScreen> {
     HapticFeedback.mediumImpact();
     final condition = EndOfSurahCondition(surahId: surahId);
     ref.read(sleepTimerControllerProvider.notifier).activate(condition);
+
+    _uiCountdownTimer?.cancel();
+    _uiCountdownTimer = null;
+    setState(() {
+      _isTimerConfiguring = false;
+      _isWindupActive = false;
+      _sliderMinutes = 0.0;
+      _remainingSeconds = 0;
+    });
 
     if (mounted) {
       AppSnackBar.showSuccess(
@@ -92,6 +177,15 @@ class _SleepTimerScreenState extends ConsumerState<SleepTimerScreen> {
     );
     ref.read(sleepTimerControllerProvider.notifier).activate(condition);
 
+    _uiCountdownTimer?.cancel();
+    _uiCountdownTimer = null;
+    setState(() {
+      _isTimerConfiguring = false;
+      _isWindupActive = false;
+      _sliderMinutes = 0.0;
+      _remainingSeconds = 0;
+    });
+
     if (mounted) {
       AppSnackBar.showSuccess(
         context,
@@ -100,252 +194,29 @@ class _SleepTimerScreenState extends ConsumerState<SleepTimerScreen> {
     }
   }
 
-  void _activateTargetAyah(int surahId, int ayahNumber) {
-    HapticFeedback.mediumImpact();
-    final condition = TargetAyahCondition(
-      surahId: surahId,
-      targetAyahNumber: ayahNumber,
-    );
-    ref.read(sleepTimerControllerProvider.notifier).activate(condition);
-
-    if (mounted) {
-      AppSnackBar.showSuccess(
-        context,
-        'تایمر خواب تا انتهای آیه ${ayahNumber.toPersianDigit()} فعال شد.',
-      );
-    }
-  }
-
-  void _cancelTimer() {
+  void _cancelTimer({bool showSnackbar = true}) {
     HapticFeedback.lightImpact();
     ref.read(sleepTimerControllerProvider.notifier).cancel();
 
-    if (mounted) {
+    _uiCountdownTimer?.cancel();
+    _uiCountdownTimer = null;
+    setState(() {
+      _isTimerConfiguring = false;
+      _isWindupActive = false;
+      _isUserDragging = false;
+      _sliderMinutes = 0.0;
+      _remainingSeconds = 0;
+    });
+
+    if (showSnackbar && mounted) {
       AppSnackBar.showInfo(
         context,
-        'تایمر خواب غیرفعال شد.',
+        'تایمر خواب خاموش شد.',
       );
     }
   }
 
-  void _showCustomMinutesDialog(BuildContext context) {
-    final textController = TextEditingController(text: '20');
 
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: context.colors.cardBackground,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: Text(
-          'مدت زمان دلخواه',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 16.5,
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-        content: Directionality(
-          textDirection: TextDirection.rtl,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'مدت زمان تلاوت را به دقیقه وارد نمایید:',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 13,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              16.0.vSpace,
-              Container(
-                width: 140,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                    width: 1.0,
-                  ),
-                ),
-                child: TextField(
-                  controller: textController,
-                  autofocus: true,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9۰-۹٠-٩]')),
-                    LengthLimitingTextInputFormatter(3),
-                  ],
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 12),
-                    suffixText: 'دقیقه ',
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actionsAlignment: MainAxisAlignment.spaceEvenly,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: Text(
-              'انصراف',
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          FilledButton(
-            onPressed: () {
-              final clean = textController.text.trim().toEnglishDigit();
-              final minutes = int.tryParse(clean);
-              if (minutes != null && minutes > 0) {
-                Navigator.of(dialogCtx).pop();
-                _activateDurationTimer(minutes.clamp(1, 360));
-              }
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-            ),
-            child: const Text('فعال‌سازی'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCustomAyahDialog(
-    BuildContext context, {
-    required int currentSurahId,
-    required int currentAyah,
-    required int totalAyahs,
-    required String surahName,
-  }) {
-    final defaultTarget = (currentAyah + 5).clamp(currentAyah, totalAyahs);
-    final textController = TextEditingController(text: defaultTarget.toString());
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: context.colors.cardBackground,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: Text(
-          'توقف در انتهای آیه',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 16.5,
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-        content: Directionality(
-          textDirection: TextDirection.rtl,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'سوره $surahName (آیه ۱ تا ${totalAyahs.toPersianDigit()})\nآیه در حال تلاوت: آیه ${currentAyah.toPersianDigit()}',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 13,
-                  height: 1.5,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              16.0.vSpace,
-              Container(
-                width: 140,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                    width: 1.0,
-                  ),
-                ),
-                child: TextField(
-                  controller: textController,
-                  autofocus: true,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9۰-۹٠-٩]')),
-                    LengthLimitingTextInputFormatter(3),
-                  ],
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 12),
-                    prefixText: 'آیه ',
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actionsAlignment: MainAxisAlignment.spaceEvenly,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: Text(
-              'انصراف',
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          FilledButton(
-            onPressed: () {
-              final clean = textController.text.trim().toEnglishDigit();
-              final target = int.tryParse(clean);
-              if (target != null && target >= 1 && target <= totalAyahs) {
-                Navigator.of(dialogCtx).pop();
-                _activateTargetAyah(currentSurahId, target);
-              }
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-            ),
-            child: const Text('فعال‌سازی'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -378,329 +249,451 @@ class _SleepTimerScreenState extends ConsumerState<SleepTimerScreen> {
     final cardBg = colors.cardBackground;
     final cardBorder = colors.cardBorder;
 
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.88;
+
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(kToolbarHeight),
-          child: Container(
-            decoration: BoxDecoration(
-              color: cardBg,
-              border: Border(
-                bottom: BorderSide(
-                  color: cardBorder,
-                  width: 0.6,
-                ),
-              ),
+      child: Container(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        decoration: BoxDecoration(
+          color: colors.dialogSurface,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(26.0),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 20,
+              offset: const Offset(0, -5),
             ),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Row(
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppModalHeader(
+                showDragHandle: true,
+                title: 'تایمر خواب تلاوت',
+                onClose: () => Navigator.of(context).pop(),
+                bottomSpacing: 6.0,
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16.0, 4.0, 16.0, 20.0),
                   children: [
-                    IconButton(
-                      tooltip: 'بازگشت',
-                      icon: Icon(
-                        CupertinoIcons.chevron_forward,
-                        size: 24,
-                        color: colorScheme.onSurface,
-                      ),
-                      splashRadius: 22,
-                      onPressed: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.of(context).maybePop();
-                      },
+                    // ── Top Instant Slider Bar ──
+                    _buildRealtimeTimerSliderCard(
+                      cardBg: cardBg,
+                      cardBorder: cardBorder,
+                      colorScheme: colorScheme,
+                      timerState: timerState,
                     ),
-                    Expanded(
-                      child: Text(
-                        'تایمر خواب تلاوت',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontFamily: AppTypography.fontFamily,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
+                    16.0.vSpace,
+
+                    // ── Section 2: Quranic Boundaries ──
+                    _buildSectionHeader(
+                      title: 'توقف بر اساس آیات و سوره‌ها',
+                      colorScheme: colorScheme,
+                    ),
+                    8.0.vSpace,
+
+                    Container(
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(AppDimens.radiusDefault),
+                        border: Border.all(
+                          color: cardBorder,
+                          width: 0.8,
                         ),
                       ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        children: [
+                          // End of Surah
+                          _buildToggleOptionTile(
+                            title: 'پایان سوره جاری',
+                            subtitle: 'تلاوت تا پایان سوره $surahName ($totalAyahs آیه)',
+                            value: _isEndOfSurahActive(timerState, currentSurahId),
+                            colorScheme: colorScheme,
+                            onChanged: (val) {
+                              if (val) {
+                                _activateEndOfSurah(currentSurahId);
+                              } else {
+                                _cancelTimer(showSnackbar: true);
+                              }
+                            },
+                          ),
+                          _buildHairlineDivider(cardBorder),
+
+                          // End of Hizb
+                          _buildToggleOptionTile(
+                            title: 'پایان حزب جاری',
+                            subtitle: 'تلاوت تا پایان حزب ${currentHizb.toPersianDigit()}',
+                            value: _isEndOfHizbActive(timerState, currentHizb),
+                            colorScheme: colorScheme,
+                            onChanged: (val) {
+                              if (val) {
+                                _activateEndOfHizb(
+                                  currentHizb,
+                                  currentAyahEntity?.hizbQuarter,
+                                );
+                              } else {
+                                _cancelTimer(showSnackbar: true);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 48), // Balance for back button
+
+                    16.0.vSpace,
+
+                    // ── Section 3: Intelligent Sleep Features ──
+                    _buildSectionHeader(
+                      title: 'امکانات هوشمند خواب',
+                      colorScheme: colorScheme,
+                    ),
+                    8.0.vSpace,
+
+                    Container(
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(AppDimens.radiusDefault),
+                        border: Border.all(
+                          color: cardBorder,
+                          width: 0.8,
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _buildSwitchFeatureTile(
+                        title: 'کاهش تدریجی صدا',
+                        subtitle: 'کاهش آرام بلندی صدا در ۳۰ ثانیه پایانی جهت جلوگیری از بیداری ناگهانی',
+                        value: timerState.isFadeOutEnabled,
+                        onChanged: (val) {
+                          HapticFeedback.lightImpact();
+                          ref.read(sleepTimerControllerProvider.notifier).setFadeOutEnabled(val);
+                        },
+                        colorScheme: colorScheme,
+                      ),
+                    ),
+
+                    16.0.vSpace,
                   ],
                 ),
               ),
-            ),
-          ),
-        ),
-        body: ListView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 18.0),
-          children: [
-            // ── Hero Active Countdown Card (When timer is running) ──
-            if (timerState.isActive) ...[
-              _buildActiveHeroCard(
-                timerState: timerState,
-                surahName: surahName,
-                cardBg: cardBg,
-                colorScheme: colorScheme,
-              ),
-              20.0.vSpace,
             ],
-
-            // ── Clean Grouped List of Sleep Timer Options ──
-            Container(
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: cardBorder,
-                  width: 0.8,
-                ),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  // Preset Minutes (5, 10, 15, 30, 45, 60)
-                  ..._presetMinutes.asMap().entries.map((entry) {
-                    final minutes = entry.value;
-                    final isActive = _isMinutesActive(timerState, minutes);
-
-                    return Column(
-                      children: [
-                        _buildOptionTile(
-                          title: '${minutes.toPersianDigit()} دقیقه',
-                          subtitle: 'توقف خودکار پس از گذشت ${minutes.toPersianDigit()} دقیقه',
-                          isActive: isActive,
-                          colorScheme: colorScheme,
-                          onTap: () => _activateDurationTimer(minutes),
-                        ),
-                        _buildHairlineDivider(cardBorder),
-                      ],
-                    );
-                  }),
-
-                  // End of Surah
-                  _buildOptionTile(
-                    title: 'پایان سوره جاری',
-                    subtitle: 'سوره $surahName',
-                    isActive: _isEndOfSurahActive(timerState, currentSurahId),
-                    colorScheme: colorScheme,
-                    onTap: () => _activateEndOfSurah(currentSurahId),
-                  ),
-                  _buildHairlineDivider(cardBorder),
-
-                  // End of Hizb
-                  _buildOptionTile(
-                    title: 'پایان حزب جاری',
-                    subtitle: 'حزب ${currentHizb.toPersianDigit()}',
-                    isActive: _isEndOfHizbActive(timerState, currentHizb),
-                    colorScheme: colorScheme,
-                    onTap: () => _activateEndOfHizb(
-                      currentHizb,
-                      currentAyahEntity?.hizbQuarter,
-                    ),
-                  ),
-                  _buildHairlineDivider(cardBorder),
-
-                  // Custom Minutes Option
-                  _buildOptionTile(
-                    title: 'مدت زمان دلخواه...',
-                    subtitle: 'تعیین دستی تعداد دقیقه به انتخاب شما',
-                    isActive: false,
-                    colorScheme: colorScheme,
-                    onTap: () => _showCustomMinutesDialog(context),
-                  ),
-                  _buildHairlineDivider(cardBorder),
-
-                  // Custom Ayah Option
-                  _buildOptionTile(
-                    title: 'تا انتهای آیه مشخص...',
-                    subtitle: 'توقف در آیه دلخواه از سوره $surahName',
-                    isActive: timerState.activeCondition is TargetAyahCondition,
-                    colorScheme: colorScheme,
-                    onTap: () => _showCustomAyahDialog(
-                      context,
-                      currentSurahId: currentSurahId,
-                      currentAyah: currentAyah,
-                      totalAyahs: totalAyahs,
-                      surahName: surahName,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            14.0.vSpace,
-
-            // ── Serene Bottom Note ──
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10.0),
-              child: Text(
-                'صوت در میانه آیه قطع نمی‌شود؛ ابتدا تلاوت آیه جاری به طور کامل تمام شده و سپس پخش خودکار متوقف می‌گردد.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 11.5,
-                  height: 1.5,
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                ),
-              ),
-            ),
-
-            24.0.vSpace,
-          ],
+          ),
         ),
       ),
     );
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Helper Components: Hero Countdown Card & Clean List Tiles
+  // Top Real-time Timer Slider Card (کوک کردن لحظه‌ای مانند اسلایدر فونت)
   // ─────────────────────────────────────────────────────────────
 
-  Widget _buildActiveHeroCard({
-    required SleepTimerState timerState,
-    required String surahName,
+  Widget _buildRealtimeTimerSliderCard({
     required Color cardBg,
+    required Color cardBorder,
     required ColorScheme colorScheme,
+    required SleepTimerState timerState,
   }) {
-    final condition = timerState.activeCondition;
+    final isDark = context.isDark;
+    final isTimerCondition =
+        timerState.isActive && timerState.activeCondition is TimerCondition;
+    final rem = timerState.remainingTime ?? Duration.zero;
 
-    String? digitalClock;
-    String statusTitle = '';
-    double? progress;
+    // Mutually exclusive: Timer mode is active only if TimerCondition is active or user is configuring it
+    final bool isSleepTimerActive = _isUserDragging ||
+        isTimerCondition ||
+        (_isTimerConfiguring && timerState.activeCondition == null) ||
+        (_isWindupActive && _remainingSeconds > 0 && isTimerCondition);
 
-    if (condition is TimerCondition) {
-      final rem = timerState.remainingTime ?? Duration.zero;
-      final m = rem.inMinutes.toString().padLeft(2, '0');
-      final s = (rem.inSeconds % 60).toString().padLeft(2, '0');
-      digitalClock = '$m:$s'.toPersianDigit();
-      statusTitle = 'زمان باقی‌مانده تا توقف تلاوت';
+    final int activeRemainingSeconds = _isUserDragging
+        ? _remainingSeconds
+        : (isTimerCondition ? rem.inSeconds : _remainingSeconds);
 
-      final totalSec = condition.duration.inSeconds > 0
-          ? condition.duration.inSeconds
-          : (rem.inSeconds > 0 ? rem.inSeconds : 1);
-      progress = (1.0 - (rem.inSeconds / totalSec)).clamp(0.0, 1.0);
-    } else if (condition is EndOfSurahCondition) {
-      statusTitle = 'توقف در پایان سوره $surahName فعال است';
-    } else if (condition is EndOfHizbCondition) {
-      statusTitle = 'توقف در پایان حزب ${condition.hizb.toPersianDigit()} فعال است';
-    } else if (condition is TargetAyahCondition) {
-      statusTitle =
-          'توقف در انتهای آیه ${condition.targetAyahNumber.toPersianDigit()} سوره $surahName فعال است';
+    final double activeSliderMinutes = _isUserDragging
+        ? _sliderMinutes
+        : (isTimerCondition
+            ? (rem.inSeconds / 60.0).clamp(0.0, 120.0)
+            : (_isWindupActive
+                ? (_remainingSeconds / 60.0).clamp(0.0, 120.0)
+                : _sliderMinutes));
+
+    String captionText;
+    if (_isUserDragging) {
+      final m = _sliderMinutes.round();
+      captionText = (m == 0)
+          ? 'نوار زیر را جابه‌جا کنید یا یک زمان انتخاب نمایید:'
+          : 'کوک شده روی: ${m.toPersianDigit()} دقیقه';
+    } else if (isSleepTimerActive && isTimerCondition && activeRemainingSeconds > 0) {
+      final m = (activeRemainingSeconds ~/ 60).toString().padLeft(2, '0');
+      final s = (activeRemainingSeconds % 60).toString().padLeft(2, '0');
+      captionText = 'زمان باقی‌مانده: ${'$m:$s'.toPersianDigit()}';
+    } else if (_isWindupActive && _remainingSeconds > 0 && isTimerCondition) {
+      final m = (_remainingSeconds ~/ 60).toString().padLeft(2, '0');
+      final s = (_remainingSeconds % 60).toString().padLeft(2, '0');
+      captionText = 'زمان باقی‌مانده: ${'$m:$s'.toPersianDigit()}';
+    } else if (isSleepTimerActive) {
+      captionText = 'نوار زیر را جابه‌جا کنید یا یک زمان انتخاب نمایید:';
+    } else {
+      captionText = 'روشن کردن تایمر برای توقف خودکار تلاوت';
     }
 
     return Container(
-      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppDimens.radiusDefault),
         border: Border.all(
-          color: colorScheme.primary.withValues(alpha: 0.3),
-          width: 1.0,
+          color: cardBorder,
+          width: 0.8,
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: colorScheme.primary,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'کوک کردن لحظه‌ای تایمر خواب',
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    3.0.vSpace,
+                    Text(
+                      isSleepTimerActive
+                          ? captionText
+                          : 'روشن کردن تایمر برای توقف خودکار تلاوت',
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 11.5,
+                        color: isSleepTimerActive
+                            ? colorScheme.onSurface
+                            : colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              8.0.hSpace,
-              Text(
-                'تایمر خواب فعال است',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primary,
+              Transform.scale(
+                scale: 0.75,
+                child: Switch(
+                  value: isSleepTimerActive,
+                  activeTrackColor: colorScheme.primary,
+                  activeThumbColor: Colors.white,
+                  onChanged: (val) {
+                    HapticFeedback.lightImpact();
+                    if (val) {
+                      if (timerState.isActive && !isTimerCondition) {
+                        ref.read(sleepTimerControllerProvider.notifier).cancel();
+                      }
+                      setState(() {
+                        _isTimerConfiguring = true;
+                        _sliderMinutes = 0.0;
+                        _remainingSeconds = 0;
+                        _isWindupActive = false;
+                        _isUserDragging = false;
+                      });
+                    } else {
+                      _cancelTimer(showSnackbar: true);
+                    }
+                  },
                 ),
               ),
             ],
           ),
-          8.0.vSpace,
-          if (digitalClock != null) ...[
-            Text(
-              digitalClock,
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 34,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-                color: colorScheme.primary,
-              ),
-            ),
-            2.0.vSpace,
-            Text(
-              statusTitle,
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 12,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            12.0.vSpace,
-            if (progress != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 4.5,
-                  backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
-                  color: colorScheme.primary,
-                ),
-              ),
-          ] else ...[
-            Text(
-              statusTitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 14.5,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.primary,
-              ),
-            ),
-          ],
-          10.0.vSpace,
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: _cancelTimer,
-            child: const Text(
-              'خاموش کردن تایمر',
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: Colors.redAccent,
-              ),
-            ),
+
+          // Animated Slider Section (نمایش نوار کوکی و کلیدها با فعال شدن تاگل)
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            child: isSleepTimerActive
+                ? Column(
+                    children: [
+                      10.0.vSpace,
+                      Row(
+                        children: [
+                          Text(
+                            '۰'.toPersianDigit(),
+                            style: TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                            ),
+                          ),
+                          Expanded(
+                            child: SliderTheme(
+                              data: SliderThemeData(
+                                activeTrackColor: colorScheme.primary,
+                                inactiveTrackColor:
+                                    colorScheme.outline.withValues(alpha: 0.2),
+                                thumbColor: Colors.white,
+                                overlayColor:
+                                    colorScheme.primary.withValues(alpha: 0.15),
+                                trackHeight: 4.5,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 8,
+                                  elevation: 2,
+                                ),
+                              ),
+                              child: Slider(
+                                value: activeSliderMinutes.clamp(0.0, 120.0),
+                                min: 0.0,
+                                max: 120.0,
+                                onChanged: (val) {
+                                  _uiCountdownTimer?.cancel();
+                                  final roundedMin = val.round();
+                                  if (roundedMin != _sliderMinutes.round()) {
+                                    HapticFeedback.selectionClick();
+                                  }
+                                  setState(() {
+                                    _isUserDragging = true;
+                                    _sliderMinutes = val;
+                                    _remainingSeconds = roundedMin * 60;
+                                  });
+                                },
+                                onChangeEnd: (val) {
+                                  setState(() {
+                                    _isUserDragging = false;
+                                  });
+                                  final roundedMin = val.round();
+                                  if (roundedMin > 0) {
+                                    _activateDurationTimer(roundedMin);
+                                  } else {
+                                    _cancelTimer();
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '۲ ساعت'.toPersianDigit(),
+                            style: TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                      12.0.vSpace,
+
+                      // ── Quick Duration Preset Chips (باکس‌های کوچک ردیفی بدون بورد و بدون استیت سلکت) ──
+                      Row(
+                        children: _presetMinutes.map((minutes) {
+                          return Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    HapticFeedback.lightImpact();
+                                    _activateDurationTimer(minutes);
+                                  },
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  child: Container(
+                                    height: 32.0,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.08)
+                                          : Colors.black.withValues(alpha: 0.05),
+                                      borderRadius: BorderRadius.circular(8.0),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          '${minutes.toPersianDigit()} دقیقه',
+                                          style: TextStyle(
+                                            fontFamily: AppTypography.fontFamily,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: colorScheme.onSurface,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildOptionTile({
+  // ─────────────────────────────────────────────────────────────
+  // Section Header Helper
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildSectionHeader({
+    required String title,
+    required ColorScheme colorScheme,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 13.5,
+          fontWeight: FontWeight.bold,
+          color: colorScheme.onSurface,
+        ),
+      ),
+    );
+  }
+
+
+
+
+  // ─────────────────────────────────────────────────────────────
+  // Clean Toggle Option Tile Helper
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildToggleOptionTile({
     required String title,
     required String subtitle,
-    required bool isActive,
+    required bool value,
     required ColorScheme colorScheme,
-    required VoidCallback onTap,
+    required ValueChanged<bool> onChanged,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onChanged(!value);
+        },
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
               Expanded(
@@ -712,9 +705,9 @@ class _SleepTimerScreenState extends ConsumerState<SleepTimerScreen> {
                       title,
                       style: TextStyle(
                         fontFamily: AppTypography.fontFamily,
-                        fontSize: 15,
-                        fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                        color: isActive ? colorScheme.primary : colorScheme.onSurface,
+                        fontSize: 14,
+                        fontWeight: value ? FontWeight.bold : FontWeight.w600,
+                        color: colorScheme.onSurface,
                       ),
                     ),
                     3.0.vSpace,
@@ -723,20 +716,25 @@ class _SleepTimerScreenState extends ConsumerState<SleepTimerScreen> {
                       style: TextStyle(
                         fontFamily: AppTypography.fontFamily,
                         fontSize: 11.5,
-                        color: isActive
-                            ? colorScheme.primary.withValues(alpha: 0.8)
-                            : colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
                       ),
                     ),
                   ],
                 ),
               ),
-              if (isActive)
-                Icon(
-                  CupertinoIcons.checkmark,
-                  size: 20,
-                  color: colorScheme.primary,
+              12.0.hSpace,
+              Transform.scale(
+                scale: 0.75,
+                child: Switch(
+                  value: value,
+                  activeTrackColor: colorScheme.primary,
+                  activeThumbColor: Colors.white,
+                  onChanged: (newVal) {
+                    HapticFeedback.lightImpact();
+                    onChanged(newVal);
+                  },
                 ),
+              ),
             ],
           ),
         ),
@@ -744,23 +742,126 @@ class _SleepTimerScreenState extends ConsumerState<SleepTimerScreen> {
     );
   }
 
+  Widget _buildSwitchFeatureTile({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required ColorScheme colorScheme,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                3.0.vSpace,
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 11.5,
+                    height: 1.4,
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          12.0.hSpace,
+          Transform.scale(
+            scale: 0.75,
+            child: Switch(
+              value: value,
+              activeTrackColor: colorScheme.primary,
+              activeThumbColor: Colors.white,
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Widget _buildUpcomingFeatureTile({
+  //   required String title,
+  //   required String subtitle,
+  //   required Color cardBorder,
+  //   required ColorScheme colorScheme,
+  // }) {
+  //   return Padding(
+  //     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         Row(
+  //           children: [
+  //             Expanded(
+  //               child: Text(
+  //                 title,
+  //                 style: TextStyle(
+  //                   fontFamily: AppTypography.fontFamily,
+  //                   fontSize: 13.5,
+  //                   fontWeight: FontWeight.bold,
+  //                   color: colorScheme.onSurface,
+  //                 ),
+  //               ),
+  //             ),
+  //             Container(
+  //               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+  //               decoration: BoxDecoration(
+  //                 color: colorScheme.primary.withValues(alpha: 0.08),
+  //                 borderRadius: BorderRadius.circular(6),
+  //               ),
+  //               child: Text(
+  //                 'به زودی',
+  //                 style: TextStyle(
+  //                   fontFamily: AppTypography.fontFamily,
+  //                   fontSize: 10,
+  //                   fontWeight: FontWeight.bold,
+  //                   color: colorScheme.primary,
+  //                 ),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //         4.0.vSpace,
+  //         Text(
+  //           subtitle,
+  //           style: TextStyle(
+  //             fontFamily: AppTypography.fontFamily,
+  //             fontSize: 11.5,
+  //             height: 1.4,
+  //             color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+
   Widget _buildHairlineDivider(Color borderColor) {
     return Divider(
       height: 1,
       thickness: 0.6,
-      indent: 18,
-      endIndent: 0,
+      indent: 16,
+      endIndent: 16,
       color: borderColor.withValues(alpha: 0.7),
     );
   }
 
-  bool _isMinutesActive(SleepTimerState timerState, int minutes) {
-    final condition = timerState.activeCondition;
-    if (condition is TimerCondition) {
-      return condition.duration.inMinutes == minutes;
-    }
-    return false;
-  }
+
 
   bool _isEndOfSurahActive(SleepTimerState timerState, int surahId) {
     final condition = timerState.activeCondition;

@@ -10,6 +10,7 @@ import '../../../../common/widgets/app_snackbar.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../domain/entities/study_plan.dart';
+// ignore: unused_import
 import '../../application/controllers/study_plan_controller.dart';
 
 /// Clean, Simple & Modern Settings Screen for creating a Quran Study Plan.
@@ -50,6 +51,8 @@ class _CreateStudyPlanScreenState extends ConsumerState<CreateStudyPlanScreen> {
 
   String _getUnitTitle(StudyPlanUnit unit) {
     switch (unit) {
+      case StudyPlanUnit.ayah:
+        return 'آیه';
       case StudyPlanUnit.page:
         return 'صفحه';
       case StudyPlanUnit.hizb:
@@ -65,8 +68,7 @@ class _CreateStudyPlanScreenState extends ConsumerState<CreateStudyPlanScreen> {
     final days = _isCustomDays
         ? (int.tryParse(_customDaysController.text) ?? 10)
         : _selectedDays;
-    final unitDesc = 'روزی ${_unitAmount.toPersianDigit()} ${_getUnitTitle(_selectedUnit)}';
-    return 'برنامه ${days.toPersianDigit()} روزه ($unitDesc)';
+    return 'برنامه ${days.toPersianDigit()} روزه';
   }
 
   void _updateTitleIfDefault() {
@@ -74,35 +76,48 @@ class _CreateStudyPlanScreenState extends ConsumerState<CreateStudyPlanScreen> {
   }
 
   Future<void> _submit() async {
+    HapticFeedback.mediumImpact();
+    final days = _isCustomDays
+        ? (int.tryParse(_customDaysController.text) ?? 10)
+        : _selectedDays;
     final title = _titleController.text.trim().isEmpty
         ? _generateDefaultTitle()
         : _titleController.text.trim();
 
-    int days = _selectedDays;
-    if (_isCustomDays) {
-      final custom = int.tryParse(_customDaysController.text.trim());
-      if (custom == null || custom < 1 || custom > 730) {
-        AppSnackBar.showError(
-            context, 'مدت زمان باید عددی بین ۱ تا ۷۳۰ روز باشد.');
-        return;
+    final existingPlans = ref.read(studyPlanControllerProvider).plans;
+    final isDuplicate = existingPlans.any((p) =>
+        !p.isOngoing &&
+        p.targetDays == days &&
+        p.unit == _selectedUnit &&
+        p.unitAmount == _unitAmount &&
+        p.status != StudyPlanStatus.completed);
+
+    if (isDuplicate) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        AppSnackBar.showWarning(
+          context,
+          'این برنامه مطالعه قبلاً ایجاد شده است.',
+        );
       }
-      days = custom;
+      return;
     }
 
-    HapticFeedback.mediumImpact();
-    await ref.read(studyPlanControllerProvider.notifier).createPlan(
-          title: title,
-          type: StudyPlanType.fixedDays,
-          targetDays: days,
-          unit: _selectedUnit,
-          unitAmount: _unitAmount,
-        );
+    final newPlan =
+        await ref.read(studyPlanControllerProvider.notifier).createPlan(
+              title: title,
+              type: StudyPlanType.fixedDays,
+              isOngoing: false,
+              targetDays: days,
+              unit: _selectedUnit,
+              unitAmount: _unitAmount,
+            );
 
     if (mounted) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(newPlan);
       AppSnackBar.showSuccess(
         context,
-        'برنامه «$title» با موفقیت ساخته و فعال شد.',
+        'برنامه مطالعه با موفقیت ایجاد شد.',
       );
     }
   }

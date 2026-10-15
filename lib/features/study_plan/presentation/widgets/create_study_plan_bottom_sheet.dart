@@ -11,18 +11,24 @@ import '../../../../common/widgets/app_modal_header.dart';
 import '../../../../common/widgets/app_snackbar.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../domain/entities/study_plan.dart';
+// ignore: unused_import
 import '../../application/controllers/study_plan_controller.dart';
 
-/// Clean Apple-styled Bottom Dialog for creating Quran Study Plan.
+/// Clean Apple-styled Bottom Dialog for creating or editing Quran Study Plan.
 class CreateStudyPlanBottomSheet extends ConsumerStatefulWidget {
-  const CreateStudyPlanBottomSheet({super.key});
+  const CreateStudyPlanBottomSheet({super.key, this.initialPlan});
 
-  static Future<StudyPlan?> show(BuildContext context) {
+  final StudyPlan? initialPlan;
+
+  static Future<StudyPlan?> show(
+    BuildContext context, {
+    StudyPlan? initialPlan,
+  }) {
     return showModalBottomSheet<StudyPlan>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => const CreateStudyPlanBottomSheet(),
+      builder: (ctx) => CreateStudyPlanBottomSheet(initialPlan: initialPlan),
     );
   }
 
@@ -43,9 +49,23 @@ class _CreateStudyPlanBottomSheetState
   StudyPlanUnit _unit = StudyPlanUnit.page;
   int _unitAmount = 1;
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialPlan != null) {
+      final p = widget.initialPlan!;
+      _isOngoing = p.isOngoing;
+      _fixedDays = p.targetDays > 0 ? p.targetDays : 10;
+      _unit = p.unit;
+      _unitAmount = p.unitAmount;
+    }
+  }
+
   /// Maximum logical amount allowed for each unit type
   int get _maxUnitAmount {
     switch (_unit) {
+      case StudyPlanUnit.ayah:
+        return 1000;
       case StudyPlanUnit.surah:
         return 114;
       case StudyPlanUnit.juz:
@@ -59,6 +79,8 @@ class _CreateStudyPlanBottomSheetState
 
   String _getUnitTitle(StudyPlanUnit u) {
     switch (u) {
+      case StudyPlanUnit.ayah:
+        return 'آیه';
       case StudyPlanUnit.page:
         return 'صفحه';
       case StudyPlanUnit.hizb:
@@ -72,9 +94,9 @@ class _CreateStudyPlanBottomSheetState
 
   String _generateTitle() {
     if (_isOngoing) {
-      return 'برنامه روزانه (روزی ${_unitAmount.toPersianDigit()} ${_getUnitTitle(_unit)})';
+      return 'برنامه روزانه';
     } else {
-      return 'برنامه ${_fixedDays.toPersianDigit()} روزه (روزی ${_unitAmount.toPersianDigit()} ${_getUnitTitle(_unit)})';
+      return 'برنامه ${_fixedDays.toPersianDigit()} روزه';
     }
   }
 
@@ -402,28 +424,67 @@ class _CreateStudyPlanBottomSheetState
   }
 
   Future<void> _submit() async {
-    final title = _generateTitle();
     HapticFeedback.mediumImpact();
-    final plan = await ref
-        .read(studyPlanControllerProvider.notifier)
-        .createPlan(
-          title: title,
-          type: _isOngoing
-              ? StudyPlanType.continuousDaily
-              : StudyPlanType.fixedDays,
-          isOngoing: _isOngoing,
-          targetDays: _isOngoing ? 0 : _fixedDays,
-          unit: _unit,
-          unitAmount: _unitAmount,
+    final title = _generateTitle();
+    final type =
+        _isOngoing ? StudyPlanType.continuousDaily : StudyPlanType.fixedDays;
+
+    final existingPlans = ref.read(studyPlanControllerProvider).plans;
+    final isDuplicate = existingPlans.any((p) =>
+        (widget.initialPlan == null || p.id != widget.initialPlan!.id) &&
+        p.isOngoing == _isOngoing &&
+        (_isOngoing || p.targetDays == _fixedDays) &&
+        p.unit == _unit &&
+        p.unitAmount == _unitAmount &&
+        p.status != StudyPlanStatus.completed);
+
+    if (isDuplicate) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        AppSnackBar.showWarning(
+          context,
+          'این برنامه مطالعه قبلاً ایجاد شده است.',
         );
+      }
+      return;
+    }
+
+    if (widget.initialPlan != null) {
+      final updatedPlan =
+          await ref.read(studyPlanControllerProvider.notifier).updatePlan(
+                planId: widget.initialPlan!.id,
+                title: title,
+                isOngoing: _isOngoing,
+                targetDays: _isOngoing ? 0 : _fixedDays,
+                unit: _unit,
+                unitAmount: _unitAmount,
+              );
+
+      if (mounted) {
+        Navigator.of(context).pop(updatedPlan);
+        AppSnackBar.showSuccess(
+          context,
+          'تغییرات برنامه با موفقیت ذخیره شد.',
+        );
+      }
+      return;
+    }
+
+    final newPlan =
+        await ref.read(studyPlanControllerProvider.notifier).createPlan(
+              title: title,
+              type: type,
+              isOngoing: _isOngoing,
+              targetDays: _isOngoing ? 0 : _fixedDays,
+              unit: _unit,
+              unitAmount: _unitAmount,
+            );
 
     if (mounted) {
-      Navigator.of(context).pop(plan);
+      Navigator.of(context).pop(newPlan);
       AppSnackBar.showSuccess(
         context,
-        _isOngoing
-            ? 'برنامه روزانه فعال شد.'
-            : 'برنامه ${_fixedDays.toPersianDigit()} روزه فعال شد.',
+        'برنامه مطالعه با موفقیت ایجاد شد.',
       );
     }
   }
@@ -455,7 +516,9 @@ class _CreateStudyPlanBottomSheetState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             AppModalHeader(
-              title: 'ایجاد برنامه مطالعه',
+              title: widget.initialPlan != null
+                  ? 'ویرایش برنامه مطالعه'
+                  : 'ایجاد برنامه مطالعه',
               showDragHandle: true,
               onClose: () => Navigator.of(context).pop(),
               bottomSpacing: 14,
@@ -498,7 +561,9 @@ class _CreateStudyPlanBottomSheetState
                 elevation: 0,
               ),
               child: Text(
-                'ایجاد برنامه مطالعه',
+                widget.initialPlan != null
+                    ? 'ذخیره تغییرات'
+                    : 'ایجاد برنامه مطالعه',
                 style: TextStyle(
                   fontFamily: AppTypography.fontFamily,
                   fontSize: 14.5,
@@ -726,6 +791,13 @@ class _CreateStudyPlanBottomSheetState
                     onTap: () {
                       HapticFeedback.selectionClick();
                       setState(() {
+                        if (_unit != u) {
+                          if (u == StudyPlanUnit.ayah && _unitAmount == 1) {
+                            _unitAmount = 5;
+                          } else if (_unit == StudyPlanUnit.ayah && _unitAmount == 5) {
+                            _unitAmount = 1;
+                          }
+                        }
                         _unit = u;
                         _unitAmount = _unitAmount.clamp(1, _maxUnitAmount);
                       });

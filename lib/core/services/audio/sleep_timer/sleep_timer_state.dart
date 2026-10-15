@@ -5,10 +5,12 @@ import 'sleep_timer_condition.dart';
 class SleepTimerState {
   final SleepTimerCondition? activeCondition;
   final Duration? remainingTime;
+  final bool isFadeOutEnabled;
 
   const SleepTimerState({
     this.activeCondition,
     this.remainingTime,
+    this.isFadeOutEnabled = true,
   });
 
   bool get isActive => activeCondition != null;
@@ -18,12 +20,15 @@ class SleepTimerState {
   SleepTimerState copyWith({
     SleepTimerCondition? Function()? activeCondition,
     Duration? Function()? remainingTime,
+    bool Function()? isFadeOutEnabled,
   }) {
     return SleepTimerState(
       activeCondition:
           activeCondition != null ? activeCondition() : this.activeCondition,
       remainingTime:
           remainingTime != null ? remainingTime() : this.remainingTime,
+      isFadeOutEnabled:
+          isFadeOutEnabled != null ? isFadeOutEnabled() : this.isFadeOutEnabled,
     );
   }
 
@@ -32,13 +37,14 @@ class SleepTimerState {
     if (identical(this, other)) return true;
     return other is SleepTimerState &&
         other.activeCondition == activeCondition &&
-        other.remainingTime == remainingTime;
+        other.remainingTime == remainingTime &&
+        other.isFadeOutEnabled == isFadeOutEnabled;
   }
 
   @override
-  int get hashCode => Object.hash(activeCondition, remainingTime);
+  int get hashCode => Object.hash(activeCondition, remainingTime, isFadeOutEnabled);
 
   @override
   String toString() =>
-      'SleepTimerState(activeCondition: $activeCondition, remainingTime: $remainingTime)';
+      'SleepTimerState(activeCondition: $activeCondition, remainingTime: $remainingTime, isFadeOutEnabled: $isFadeOutEnabled)';
 }

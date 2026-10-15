@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../common/extensions/context_extension.dart';
 import '../../../../common/extensions/int_extension.dart';
@@ -38,8 +39,21 @@ class OtaUpdateDialog extends ConsumerWidget {
     final colorScheme = context.colorScheme;
     final isDark = context.isDark;
     final patch = otaState.patch;
+    final isStoreRequired = otaState.isStoreUpdateRequired;
 
-    final isMandatory = isForce || (patch?.isForce == true);
+    final isMandatory = isForce ||
+        (isStoreRequired
+            ? otaState.storeIsMandatory
+            : (patch?.isForce == true));
+
+    final String dialogTitle;
+    if (isStoreRequired) {
+      dialogTitle = 'ارتقای نسخه برنامه (کافه‌بازار)';
+    } else if (patch?.isNativeApk == true) {
+      dialogTitle = 'ارتقای نسخه نرم‌افزار (APK)';
+    } else {
+      dialogTitle = 'به‌روزرسانی نرم‌افزار';
+    }
 
     return PopScope(
       canPop: !isMandatory && !otaState.isDownloading,
@@ -65,9 +79,7 @@ class OtaUpdateDialog extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 AppModalHeader(
-                  title: patch?.isNativeApk == true
-                      ? 'ارتقای نسخه نرم‌افزار (APK)'
-                      : 'به‌روزرسانی نرم‌افزار',
+                  title: dialogTitle,
                   onClose: (isMandatory || otaState.isDownloading)
                       ? null
                       : () {
@@ -79,45 +91,86 @@ class OtaUpdateDialog extends ConsumerWidget {
                   bottomSpacing: 14,
                 ),
 
-                // Simple Minimal Version Header (بدون آیکون و رنگ‌های تند)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      patch?.isNativeApk == true
-                          ? 'نسخه نصبی: ${patch?.version ?? ""}'
-                          : 'نسخه جدید: ${patch?.version ?? ""}',
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    if (isMandatory) ...[
-                      4.vSpace,
+                // Version Header & Info
+                if (isStoreRequired) ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        'این به‌روزرسانی الزامی است.',
+                        otaState.storeLatestVersion?.isNotEmpty == true
+                            ? 'نسخه جدید در کافه‌بازار: ${otaState.storeLatestVersion}'
+                            : 'نسخه جدید نرم‌افزار در کافه‌بازار',
                         style: TextStyle(
                           fontFamily: AppTypography.fontFamily,
-                          fontSize: 12,
-                          color: colorScheme.error,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                      if (isMandatory) ...[
+                        4.vSpace,
+                        Text(
+                          'این به‌روزرسانی الزامی است.',
+                          style: TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 12,
+                            color: colorScheme.error,
+                          ),
+                        ),
+                      ],
+                      8.vSpace,
+                      Text(
+                        otaState.storeMessage ??
+                            'برای بهره‌مندی از امکانات جدید و پایداری عملکرد، لطفاً نسخه جدید را از کافه‌بازار دریافت و نصب کنید.',
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 12.5,
+                          height: 1.5,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
-                    if (patch?.formattedSize.isNotEmpty == true) ...[
-                      4.vSpace,
+                  ),
+                ] else ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        'حجم بسته: ${patch!.formattedSize}',
+                        patch?.isNativeApk == true
+                            ? 'نسخه نصبی: ${patch?.version ?? ""}'
+                            : 'نسخه جدید: ${patch?.version ?? ""}',
                         style: TextStyle(
                           fontFamily: AppTypography.fontFamily,
-                          fontSize: 12,
-                          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
                         ),
                       ),
+                      if (isMandatory) ...[
+                        4.vSpace,
+                        Text(
+                          'این به‌روزرسانی الزامی است.',
+                          style: TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 12,
+                            color: colorScheme.error,
+                          ),
+                        ),
+                      ],
+                      if (patch?.formattedSize.isNotEmpty == true) ...[
+                        4.vSpace,
+                        Text(
+                          'حجم بسته: ${patch!.formattedSize}',
+                          style: TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
+                  ),
+                ],
 
                 14.vSpace,
 
@@ -267,7 +320,35 @@ class OtaUpdateDialog extends ConsumerWidget {
                           ? null
                           : () async {
                               HapticFeedback.mediumImpact();
-                              if (otaState.isReadyToRestart) {
+                              if (otaState.isStoreUpdateRequired) {
+                                final rawUrl = otaState.storeUrl ??
+                                    'bazaar://details?id=com.qurantafakor.app';
+                                final uri = Uri.tryParse(rawUrl);
+                                var launched = false;
+                                if (uri != null) {
+                                  try {
+                                    launched = await launchUrl(
+                                      uri,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  } catch (_) {}
+                                }
+                                if (!launched && otaState.storeWebUrl != null) {
+                                  final webUri =
+                                      Uri.tryParse(otaState.storeWebUrl!);
+                                  if (webUri != null) {
+                                    try {
+                                      await launchUrl(
+                                        webUri,
+                                        mode: LaunchMode.externalApplication,
+                                      );
+                                    } catch (_) {}
+                                  }
+                                }
+                                if (!isMandatory && context.mounted) {
+                                  Navigator.of(context).pop(true);
+                                }
+                              } else if (otaState.isReadyToRestart) {
                                 await OtaUpdateController.restartApp();
                               } else if (otaState.patch?.isNativeApk == true) {
                                 await controller.startDownloadAndApply();
@@ -334,6 +415,9 @@ class OtaUpdateDialog extends ConsumerWidget {
   }
 
   String _getButtonLabel(OtaUpdateState state) {
+    if (state.isStoreUpdateRequired) {
+      return 'دریافت از کافه‌بازار';
+    }
     if (state.isReadyToRestart) {
       return 'راه‌اندازی مجدد برنامه';
     }

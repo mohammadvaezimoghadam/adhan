@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/audio_manager/presentation/ui/audio_download_manager_screen.dart';
+import '../../features/audio_sleep_timer/presentation/ui/sleep_timer_screen.dart';
 import '../../features/bookmarks/presentation/ui/bookmarks_screen.dart';
 import '../../features/download_manager/presentation/ui/download_hub_screen.dart';
 import '../../features/main_navigation/presentation/ui/main_navigation_screen.dart';
@@ -80,6 +81,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const TafakorLoginScreen(),
       ),
       GoRoute(
+        path: '/sleep-timer',
+        name: audioSleepTimerRoute,
+        builder: (context, state) => const SleepTimerScreen(),
+      ),
+      GoRoute(
         path: '/profile',
         name: profileRoute,
         builder: (context, state) => const ProfileScreen(),
@@ -98,11 +104,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           final ayahString = state.uri.queryParameters['ayah'];
           final translationId = state.uri.queryParameters['translationId'];
           final initialAyah = ayahString != null ? int.tryParse(ayahString) : null;
+          final autoPlay = state.uri.queryParameters['autoPlay'] == 'true';
+          final isStudyPlan = state.uri.queryParameters['isStudyPlan'] == 'true';
           return QuranReaderScreen(
             surahId: surahId,
             surahName: surahName,
             initialAyahNumber: initialAyah,
             translationId: translationId,
+            autoPlayAudio: autoPlay,
+            isStudyPlan: isStudyPlan,
           );
         },
       ),

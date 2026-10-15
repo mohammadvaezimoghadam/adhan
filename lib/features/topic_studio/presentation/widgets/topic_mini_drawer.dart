@@ -11,6 +11,7 @@ import '../../../../common/extensions/context_extension.dart';
 import '../../../../common/extensions/int_extension.dart';
 import '../../../../common/extensions/size_extension.dart';
 import '../../../../common/widgets/app_snackbar.dart';
+import '../../../../core/services/media/image_picker_service.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../quran_reader/application/controllers/selected_ayah_action_provider.dart';
 import '../../application/controllers/in_drawer_editor_controller.dart';
@@ -20,6 +21,7 @@ import '../../domain/entities/topic_drag_data.dart';
 import '../../../tafakor/application/controllers/tafakor_auth_controller.dart';
 import '../../../tafakor/presentation/ui/tafakor_login_screen.dart';
 import 'send_to_topic_dialog.dart';
+import 'topic_media_picker_sheet.dart';
 
 /// Floating Mini-Drawer for Contemplation Notebook (دفتر تفکر).
 /// Sits on the right edge of the Quran reader and houses the in-drawer live editor.
@@ -254,6 +256,166 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
     required this.colorScheme,
   });
 
+  Future<void> _showMediaAttachmentPopup(
+    BuildContext context,
+    WidgetRef ref, [
+    BuildContext? buttonContext,
+  ]) async {
+    HapticFeedback.lightImpact();
+    final currentMedia = ref.read(inDrawerEditorControllerProvider).attachedImagePath;
+    if (currentMedia != null) {
+      if (context.mounted) {
+        AppSnackBar.showInfo(
+          context,
+          'امکان پیوست بیش از یک فایل وجود ندارد. برای تغییر، ابتدا فایل فعلی را با دکمه ضربدر حذف کنید.',
+        );
+      }
+      return;
+    }
+
+    final type = await TopicMediaPickerSheet.show(buttonContext ?? context);
+    if (type == null || !context.mounted) return;
+
+    if (type == TopicAttachmentType.image) {
+      await _pickImage(context, ref);
+    } else if (type == TopicAttachmentType.video) {
+      await _pickVideo(context, ref);
+    }
+  }
+
+  Future<void> _pickImage(BuildContext context, WidgetRef ref) async {
+    final pickerService = ref.read(imagePickerServiceProvider);
+    final image = await pickerService.pickImageFromGallery();
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      final notifier = ref.read(inDrawerEditorControllerProvider.notifier);
+      notifier.setAttachedImage(
+        path: image.path,
+        bytes: bytes,
+      );
+      // Auto-add an active note text block if there are no blocks yet
+      if (ref.read(inDrawerEditorControllerProvider).blocks.isEmpty) {
+        notifier.addUserTextBlock();
+      }
+      HapticFeedback.mediumImpact();
+    }
+  }
+
+  Future<void> _pickVideo(BuildContext context, WidgetRef ref) async {
+    final pickerService = ref.read(imagePickerServiceProvider);
+    final video = await pickerService.pickVideoFromGallery();
+    if (video != null) {
+      final notifier = ref.read(inDrawerEditorControllerProvider.notifier);
+      notifier.setAttachedVideo(
+        path: video.path,
+      );
+      // Auto-add an active note text block if there are no blocks yet
+      if (ref.read(inDrawerEditorControllerProvider).blocks.isEmpty) {
+        notifier.addUserTextBlock();
+      }
+      HapticFeedback.mediumImpact();
+    }
+  }
+
+  /// 1:1 Minimalist attached media thumbnail (photo/video) with top-left close button matching bottom dialogs
+  Widget _buildMinimal1x1ImagePreview(
+    BuildContext context,
+    WidgetRef ref,
+    InDrawerEditorState editorState,
+  ) {
+    if (!editorState.hasAttachedImage) {
+      return const SizedBox.shrink();
+    }
+
+    const double size = 72.0;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // 1:1 square media thumbnail
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E22) : const Color(0xFFF2F2F7),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : Colors.black.withValues(alpha: 0.10),
+              width: 0.9,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: editorState.isVideo
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        CupertinoIcons.videocam_fill,
+                        size: 26,
+                        color: isDark ? Colors.white60 : Colors.black45,
+                      ),
+                      4.vSpace,
+                      Text(
+                        'ویدیو',
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white54 : Colors.black45,
+                        ),
+                      ),
+                    ],
+                  )
+                : (editorState.attachedImageBytes != null
+                    ? Image.memory(
+                        editorState.attachedImageBytes!,
+                        width: size,
+                        height: size,
+                        fit: BoxFit.cover,
+                      )
+                    : const SizedBox.shrink()),
+          ),
+        ),
+
+        // Close button in top-left corner matching bottom dialogs
+        Positioned(
+          top: -4,
+          left: -4,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () {
+              HapticFeedback.lightImpact();
+              ref
+                  .read(inDrawerEditorControllerProvider.notifier)
+                  .removeAttachedImage();
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF222226) : Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.20),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Icon(
+                CupertinoIcons.xmark_circle_fill,
+                size: 20,
+                color: isDark ? Colors.white70 : Colors.black45,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _copyFullDraft(
     BuildContext context,
     InDrawerEditorState editorState,
@@ -348,7 +510,6 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final editorState = ref.watch(inDrawerEditorControllerProvider);
-    final blocks = editorState.blocks;
 
     return ClipRRect(
       borderRadius: const BorderRadius.only(
@@ -401,7 +562,25 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
                       ),
                       const Spacer(),
 
-                      // Clear all button (visible when there are blocks)
+                      // Media attachment button
+                      Builder(
+                        builder: (btnCtx) => IconButton(
+                          tooltip: 'پیوست رسانه',
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(
+                            editorState.hasAttachedImage
+                                ? (editorState.isVideo ? CupertinoIcons.videocam_fill : CupertinoIcons.photo_fill)
+                                : CupertinoIcons.plus_circle,
+                            size: 19,
+                          ),
+                          color: editorState.hasAttachedImage
+                              ? colorScheme.primary
+                              : (isDark ? Colors.white70 : Colors.black54),
+                          onPressed: () => _showMediaAttachmentPopup(context, ref, btnCtx),
+                        ),
+                      ),
+
+                      // Clear all button (visible when there are blocks or attached image)
                       if (editorState.isNotEmpty)
                         IconButton(
                           tooltip: 'پاک‌سازی همه',
@@ -458,9 +637,9 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
                                 alpha: isDark ? 0.12 : 0.08,
                               )
                             : Colors.transparent,
-                        child: blocks.isEmpty
+                        child: editorState.isEmpty
                             ? _buildEmptyState(context, ref, isDropHovered)
-                            : _buildEditorCanvas(context, ref, blocks),
+                            : _buildEditorCanvas(context, ref, editorState),
                       );
                     },
                   ),
@@ -529,33 +708,64 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
               ),
             ),
             18.vSpace,
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: colorScheme.onSurface,
-                side: BorderSide(color: colors.cardBorder),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorScheme.onSurface,
+                    side: BorderSide(color: colors.cardBorder),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    ref
+                        .read(inDrawerEditorControllerProvider.notifier)
+                        .addUserTextBlock();
+                  },
+                  icon: const Icon(CupertinoIcons.add, size: 14),
+                  label: const Text(
+                    'نوشتن یادداشت',
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
+                8.hSpace,
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorScheme.primary,
+                    side: BorderSide(
+                      color: colorScheme.primary.withValues(alpha: 0.40),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                  ),
+                  onPressed: () => _showMediaAttachmentPopup(context, ref),
+                  icon: const Icon(CupertinoIcons.plus, size: 14),
+                  label: const Text(
+                    'افزودن پیوست',
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-              ),
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                ref
-                    .read(inDrawerEditorControllerProvider.notifier)
-                    .addUserTextBlock();
-              },
-              icon: const Icon(CupertinoIcons.add, size: 15),
-              label: const Text(
-                'نوشتن اولین یادداشت',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              ],
             ),
           ],
         ),
@@ -567,76 +777,227 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
   Widget _buildEditorCanvas(
     BuildContext context,
     WidgetRef ref,
-    List<TopicBlock> blocks,
+    InDrawerEditorState editorState,
   ) {
+    final blocks = editorState.blocks;
+
     return Column(
       children: [
         // Reorderable list of blocks matching topic_editor_screen
         Expanded(
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              canvasColor: Colors.transparent,
-            ),
-            child: GestureDetector(
-              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: ReorderableListView.builder(
-                buildDefaultDragHandles: false,
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
-                physics: const BouncingScrollPhysics(),
-                itemCount: blocks.length,
-                onReorderStart: (index) {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                },
-                proxyDecorator: (child, index, animation) {
-                  return AnimatedBuilder(
-                    animation: animation,
-                    builder: (context, _) {
-                      final double elevation =
-                          Curves.easeInOut.transform(animation.value) * 6;
-                      return Material(
-                        color: colors.dialogSurface,
-                        elevation: elevation,
-                        borderRadius: BorderRadius.circular(16),
-                        shadowColor: Colors.black26,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
+          child: blocks.isEmpty
+              ? SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.04)
+                              : Colors.black.withValues(alpha: 0.03),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : Colors.black.withValues(alpha: 0.10),
+                            width: 0.9,
                           ),
-                          child: child,
                         ),
-                      );
-                    },
-                  );
-                },
-                // ignore: deprecated_member_use
-                onReorder: (oldIndex, newIndex) {
-                  HapticFeedback.selectionClick();
-                  ref
-                      .read(inDrawerEditorControllerProvider.notifier)
-                      .reorderBlocks(oldIndex, newIndex);
-                },
-                itemBuilder: (context, index) {
-                  final block = blocks[index];
-                  return _buildBlockItem(
-                    key: ValueKey(block.id),
-                    context: context,
-                    ref: ref,
-                    index: index,
-                    block: block,
-                  );
-                },
-              ),
-            ),
-          ),
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 1:1 minimal image thumbnail in topmost row if attached
+                            if (editorState.hasAttachedImage) ...[
+                              Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: _buildMinimal1x1ImagePreview(
+                                  context,
+                                  ref,
+                                  editorState,
+                                ),
+                              ),
+                              8.vSpace,
+                            ],
+                            Row(
+                              children: [
+                                Icon(
+                                  CupertinoIcons.pencil,
+                                  size: 13,
+                                  color: colorScheme.primary,
+                                ),
+                                6.hSpace,
+                                Text(
+                                  'توضیحات و یادداشت تصویر',
+                                  style: TextStyle(
+                                    fontFamily: AppTypography.fontFamily,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            8.vSpace,
+                            TextField(
+                              maxLines: null,
+                              minLines: 4,
+                              keyboardType: TextInputType.multiline,
+                              style: TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 13.5,
+                                height: 1.6,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                hintText:
+                                    'توضیحات، کپشن یا یادداشت خود را برای این تصویر بنویسید...',
+                                hintStyle: TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontSize: 12.5,
+                                  color:
+                                      isDark ? Colors.white38 : Colors.black38,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              onChanged: (text) {
+                                ref
+                                    .read(inDrawerEditorControllerProvider.notifier)
+                                    .addUserTextBlock(text);
+                              },
+                            ),
+                            6.vSpace,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(16),
+                                    onTap: () => _showMediaAttachmentPopup(context, ref),
+                                    child: Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: isDark
+                                            ? Colors.white.withValues(alpha: 0.08)
+                                            : Colors.black.withValues(alpha: 0.05),
+                                        border: Border.all(
+                                          color: isDark
+                                              ? Colors.white.withValues(alpha: 0.12)
+                                              : Colors.black.withValues(alpha: 0.08),
+                                          width: 1.0,
+                                        ),
+                                      ),
+                                      child: Center(
+                                        child: Icon(
+                                          CupertinoIcons.plus,
+                                          size: 16,
+                                          color: isDark
+                                              ? Colors.white38
+                                              : Colors.black38,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      14.vSpace,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            CupertinoIcons.arrow_down_circle,
+                            size: 14,
+                            color: isDark ? Colors.white38 : Colors.black38,
+                          ),
+                          6.hSpace,
+                          Text(
+                            'می‌توانید آیات قرآن را نیز به اینجا بکشید',
+                            style: TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 11,
+                              color: isDark ? Colors.white38 : Colors.black38,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              : Theme(
+                  data: Theme.of(context).copyWith(
+                    canvasColor: Colors.transparent,
+                  ),
+                  child: GestureDetector(
+                    onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                    child: ReorderableListView.builder(
+                      buildDefaultDragHandles: false,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: blocks.length,
+                      onReorderStart: (index) {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                      },
+                      proxyDecorator: (child, index, animation) {
+                        return AnimatedBuilder(
+                          animation: animation,
+                          builder: (context, _) {
+                            final double elevation =
+                                Curves.easeInOut.transform(animation.value) * 6;
+                            return Material(
+                              color: colors.dialogSurface,
+                              elevation: elevation,
+                              borderRadius: BorderRadius.circular(16),
+                              shadowColor: Colors.black26,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                child: child,
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      // ignore: deprecated_member_use
+                      onReorder: (oldIndex, newIndex) {
+                        HapticFeedback.selectionClick();
+                        ref
+                            .read(inDrawerEditorControllerProvider.notifier)
+                            .reorderBlocks(oldIndex, newIndex);
+                      },
+                      itemBuilder: (context, index) {
+                        final block = blocks[index];
+                        return _buildBlockItem(
+                          key: ValueKey(block.id),
+                          context: context,
+                          ref: ref,
+                          index: index,
+                          block: block,
+                        );
+                      },
+                    ),
+                  ),
+                ),
         ),
 
-        // Flat "افزودن یادداشت" placed right inside the edit area, stuck to the bottom of the canvas
+        // Action row: Add Note + Add Image placed right inside the edit area
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-          child: _buildFlatAddNoteButton(context, ref),
+          child: _buildFlatAddButtonsRow(context, ref),
         ),
 
         // Bottom action bar: Only Copy & Send to topic
@@ -747,53 +1108,101 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
     );
   }
 
-  /// Flat, minimal button placed directly inside the edit area, stuck to the bottom of the canvas
-  Widget _buildFlatAddNoteButton(BuildContext context, WidgetRef ref) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () {
-          HapticFeedback.lightImpact();
-          ref
-              .read(inDrawerEditorControllerProvider.notifier)
-              .addUserTextBlock();
-        },
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
+  /// Flat, minimal button row placed directly inside the edit area: Add Note & Add Image
+  Widget _buildFlatAddButtonsRow(BuildContext context, WidgetRef ref) {
+    return Row(
+      children: [
+        // 1. Add Note button
+        Expanded(
+          child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.12)
-                  : Colors.black.withValues(alpha: 0.10),
-              width: 0.8,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                CupertinoIcons.add,
-                size: 14,
-                color: isDark ? Colors.white54 : Colors.black45,
-              ),
-              6.hSpace,
-              Text(
-                'افزودن یادداشت',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.white60 : Colors.black54,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () {
+                HapticFeedback.lightImpact();
+                ref
+                    .read(inDrawerEditorControllerProvider.notifier)
+                    .addUserTextBlock();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : Colors.black.withValues(alpha: 0.10),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      CupertinoIcons.add,
+                      size: 14,
+                      color: isDark ? Colors.white54 : Colors.black45,
+                    ),
+                    6.hSpace,
+                    Text(
+                      'افزودن یادداشت',
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white60 : Colors.black54,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
-      ),
+        8.hSpace,
+        // 2. Add Media Attachment Button
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _showMediaAttachmentPopup(context, ref),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.black.withValues(alpha: 0.10),
+                  width: 0.8,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    CupertinoIcons.plus,
+                    size: 15,
+                    color: colorScheme.primary,
+                  ),
+                  6.hSpace,
+                  Text(
+                    'پیوست',
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -964,15 +1373,16 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
     }
 
     final captionColor = isDark ? Colors.white38 : Colors.black38;
+    final isUserNote = block.type == TopicBlockType.userText;
 
     return Container(
       key: key,
-      margin: const EdgeInsets.only(bottom: 6),
+      margin: const EdgeInsets.only(bottom: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Minimalist Caption Bar with effortless Drag & Drop support (no outer border)
+          // Minimalist Caption Bar with effortless Drag & Drop support
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -980,14 +1390,27 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
                 child: Container(
                   color: Colors.transparent,
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    captionLabel,
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w400,
-                      color: captionColor,
-                    ),
+                  child: Row(
+                    children: [
+                      if (isUserNote) ...[
+                        Icon(
+                          CupertinoIcons.pencil,
+                          size: 13,
+                          color: colorScheme.primary,
+                        ),
+                        4.hSpace,
+                      ],
+                      Text(
+                        isUserNote ? 'یادداشت / توضیحات' : captionLabel,
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 11,
+                          fontWeight:
+                              isUserNote ? FontWeight.bold : FontWeight.w400,
+                          color: isUserNote ? colorScheme.primary : captionColor,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1004,7 +1427,7 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
                   padding: const EdgeInsets.all(4.0),
                   child: Icon(
                     CupertinoIcons.xmark,
-                    size: 12,
+                    size: 13,
                     color: isDark ? Colors.white38 : Colors.black38,
                   ),
                 ),
@@ -1019,19 +1442,106 @@ class _TopicMiniDrawerContent extends ConsumerWidget {
             ],
           ),
 
-          1.vSpace,
+          4.vSpace,
 
-          // Editable content sitting cleanly with zero extra padding
-          _EditableBlockField(
-            initialText: block.content,
-            hintText: hintText,
-            style: contentStyle,
-            onChanged: (newText) {
-              ref
-                  .read(inDrawerEditorControllerProvider.notifier)
-                  .updateBlockContent(block.id, newText);
-            },
-          ),
+          // Editable content: framed with subtle background for user notes, flat for tafsir/translation
+          if (isUserNote)
+            Container(
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : Colors.black.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.black.withValues(alpha: 0.10),
+                  width: 0.9,
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Top row inside text field: 1:1 minimal image preview if attached
+                  if (ref.watch(inDrawerEditorControllerProvider).hasAttachedImage) ...[
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: _buildMinimal1x1ImagePreview(
+                        context,
+                        ref,
+                        ref.watch(inDrawerEditorControllerProvider),
+                      ),
+                    ),
+                    6.vSpace,
+                  ],
+
+                  _EditableBlockField(
+                    initialText: block.content,
+                    hintText: 'یادداشت، تأمل یا توضیحات تصویر را اینجا بنویسید...',
+                    style: contentStyle,
+                    minLines: 3,
+                    onChanged: (newText) {
+                      ref
+                          .read(inDrawerEditorControllerProvider.notifier)
+                          .updateBlockContent(block.id, newText);
+                    },
+                  ),
+                  4.vSpace,
+                  // Photo attach button directly inside the note text field
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => _showMediaAttachmentPopup(context, ref),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.05),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.12)
+                                    : Colors.black.withValues(alpha: 0.08),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Center(
+                              child: Icon(
+                                CupertinoIcons.plus,
+                                size: 17,
+                                color: isDark
+                                    ? Colors.white38
+                                    : Colors.black38,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+          else
+            _EditableBlockField(
+              initialText: block.content,
+              hintText: hintText,
+              style: contentStyle,
+              minLines: 1,
+              onChanged: (newText) {
+                ref
+                    .read(inDrawerEditorControllerProvider.notifier)
+                    .updateBlockContent(block.id, newText);
+              },
+            ),
         ],
       ),
     );
@@ -1073,12 +1583,14 @@ class _EditableBlockField extends StatefulWidget {
   final String initialText;
   final String hintText;
   final TextStyle? style;
+  final int minLines;
   final ValueChanged<String> onChanged;
 
   const _EditableBlockField({
     required this.initialText,
     required this.hintText,
     this.style,
+    this.minLines = 1,
     required this.onChanged,
   });
 
@@ -1157,6 +1669,7 @@ class _EditableBlockFieldState extends State<_EditableBlockField> {
       controller: _controller,
       focusNode: _focusNode,
       maxLines: null,
+      minLines: widget.minLines,
       keyboardType: TextInputType.multiline,
       style: widget.style ?? defaultStyle,
       decoration: InputDecoration(

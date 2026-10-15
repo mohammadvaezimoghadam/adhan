@@ -10,12 +10,14 @@ import '../../../../common/extensions/int_extension.dart';
 import '../../../../common/extensions/size_extension.dart';
 import '../../../../common/widgets/app_snackbar.dart';
 import '../../../../core/routes/route_name.dart';
+import '../../../../core/services/media/image_picker_service.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../tafakor/application/controllers/tafakor_auth_controller.dart';
 import '../../../tafakor/presentation/ui/tafakor_login_screen.dart';
 import '../../application/controllers/in_drawer_editor_controller.dart';
 import '../../domain/entities/topic_block.dart';
 import '../widgets/send_to_topic_dialog.dart';
+import '../widgets/topic_media_picker_sheet.dart';
 
 /// Fullscreen Editor for Contemplation Notebook («دفتر تفکر»).
 /// Provides reorderable, live-editable blocks with direct publication to Tafakor channels.
@@ -59,6 +61,53 @@ class _TafakorEditorScreenState extends ConsumerState<TafakorEditorScreen> {
     _inputFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _showMediaAttachmentPopup([BuildContext? buttonContext]) async {
+    HapticFeedback.lightImpact();
+    final currentMedia = ref.read(inDrawerEditorControllerProvider).attachedImagePath;
+    if (currentMedia != null) {
+      if (mounted) {
+        AppSnackBar.showInfo(
+          context,
+          'امکان پیوست بیش از یک فایل وجود ندارد. برای تغییر، ابتدا فایل فعلی را با دکمه ضربدر حذف کنید.',
+        );
+      }
+      return;
+    }
+
+    final type = await TopicMediaPickerSheet.show(buttonContext ?? context);
+    if (type == null || !mounted) return;
+
+    if (type == TopicAttachmentType.image) {
+      await _pickImage();
+    } else if (type == TopicAttachmentType.video) {
+      await _pickVideo();
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final pickerService = ref.read(imagePickerServiceProvider);
+    final image = await pickerService.pickImageFromGallery();
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      ref.read(inDrawerEditorControllerProvider.notifier).setAttachedImage(
+            path: image.path,
+            bytes: bytes,
+          );
+      HapticFeedback.mediumImpact();
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    final pickerService = ref.read(imagePickerServiceProvider);
+    final video = await pickerService.pickVideoFromGallery();
+    if (video != null) {
+      ref.read(inDrawerEditorControllerProvider.notifier).setAttachedVideo(
+            path: video.path,
+          );
+      HapticFeedback.mediumImpact();
+    }
   }
 
 
@@ -198,7 +247,8 @@ class _TafakorEditorScreenState extends ConsumerState<TafakorEditorScreen> {
               Expanded(
                 child: blocks.isEmpty
                     ? _buildEmptyState(context, isDark, colorScheme, colors)
-                    : _buildEditorCanvas(context, isDark, colorScheme, colors, blocks),
+                    : _buildEditorCanvas(
+                        context, isDark, colorScheme, colors, blocks),
               ),
 
               // Expanding Input Bar
@@ -683,9 +733,9 @@ class _TafakorEditorScreenState extends ConsumerState<TafakorEditorScreen> {
                 ),
                 child: _isExpanded
                     ? _buildExpandedContent(
-                        context, isDark, colorScheme, canSend)
+                        context, isDark, colorScheme, canSend, editorState)
                     : _buildCompactContent(
-                        context, isDark, colorScheme, canSend, showExpandIcon),
+                        context, isDark, colorScheme, canSend, showExpandIcon, editorState),
               ),
             ),
           ),
@@ -701,6 +751,7 @@ class _TafakorEditorScreenState extends ConsumerState<TafakorEditorScreen> {
     ColorScheme colorScheme,
     bool canSend,
     bool showExpandIcon,
+    InDrawerEditorState editorState,
   ) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -719,7 +770,18 @@ class _TafakorEditorScreenState extends ConsumerState<TafakorEditorScreen> {
           4.vSpace,
         ],
 
-        // 1. Text Field at top (محلی که کاربر می‌نویسد در ابتدا قرار می‌گیرد)
+        // 1. Topmost row inside text field: 1:1 minimal image preview if attached
+        if (editorState.hasAttachedImage) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 8),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: _buildMinimal1x1ImagePreview(editorState, isDark),
+            ),
+          ),
+        ],
+
+        // 2. Text Field at top
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           child: TextField(
@@ -756,26 +818,34 @@ class _TafakorEditorScreenState extends ConsumerState<TafakorEditorScreen> {
 
         4.vSpace,
 
-        // 2. Action row UNDERNEATH the text field (دکمه ارسال زیر محل نوشتن)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: _buildSendButton(canSend, isDark, colorScheme),
+        // 2. Action row UNDERNEATH the text field (دکمه‌های انتخاب عکس و ارسال)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Circular photo picker icon button
+            _buildPhotoPickerButton(isDark, colorScheme),
+
+            // Send button
+            _buildSendButton(canSend, isDark, colorScheme),
+          ],
         ),
       ],
     );
   }
 
-  /// 80% Expanded mode with full scrollable text field and collapse button (بدون هدر اضافه)
+  /// 80% Expanded mode with full scrollable text field and collapse button
   Widget _buildExpandedContent(
     BuildContext context,
     bool isDark,
     ColorScheme colorScheme,
     bool canSend,
+    InDrawerEditorState editorState,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Top row: Collapse button at top right (همان دکمه در همان موقعیت)
+        // Top row: Collapse button at top right
         Align(
           alignment: AlignmentDirectional.topStart,
           child: _buildExpandCollapseButton(
@@ -786,6 +856,17 @@ class _TafakorEditorScreenState extends ConsumerState<TafakorEditorScreen> {
         ),
 
         4.vSpace,
+
+        // Topmost row inside expanded text field: 1:1 minimal image preview if attached
+        if (editorState.hasAttachedImage) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 8),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: _buildMinimal1x1ImagePreview(editorState, isDark),
+            ),
+          ),
+        ],
 
         // Large scrollable multiline TextField
         Expanded(
@@ -827,17 +908,160 @@ class _TafakorEditorScreenState extends ConsumerState<TafakorEditorScreen> {
 
         4.vSpace,
 
-        // Bottom Action Row in Expanded Mode: Send Button (Left side in RTL)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: _buildSendButton(
-            canSend,
-            isDark,
-            colorScheme,
-            onPressedOverride: () {
-              setState(() => _isExpanded = false);
-              _handleSend();
+        // Bottom Action Row in Expanded Mode: Photo Button & Send Button
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildPhotoPickerButton(isDark, colorScheme),
+            _buildSendButton(
+              canSend,
+              isDark,
+              colorScheme,
+              onPressedOverride: () {
+                setState(() => _isExpanded = false);
+                _handleSend();
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Circular media attachment button (+ icon) opening ChatGPT-style popup
+  Widget _buildPhotoPickerButton(
+    bool isDark,
+    ColorScheme colorScheme,
+  ) {
+    return Builder(
+      builder: (btnCtx) {
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => _showMediaAttachmentPopup(btnCtx),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFF2F2F7),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : const Color(0xFFE5E5EA),
+                  width: 1.0,
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  CupertinoIcons.plus,
+                  size: 20,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 1:1 Minimalist attached media thumbnail (photo/video) with top-left cross button matching bottom dialogs
+  Widget _buildMinimal1x1ImagePreview(
+    InDrawerEditorState editorState,
+    bool isDark,
+  ) {
+    if (!editorState.hasAttachedImage) {
+      return const SizedBox.shrink();
+    }
+
+    const double size = 72.0;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // 1:1 square media thumbnail
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E22) : const Color(0xFFF2F2F7),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : Colors.black.withValues(alpha: 0.12),
+              width: 0.9,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: editorState.isVideo
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        CupertinoIcons.videocam_fill,
+                        size: 26,
+                        color: isDark ? Colors.white60 : Colors.black45,
+                      ),
+                      4.vSpace,
+                      Text(
+                        'ویدیو',
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white54 : Colors.black45,
+                        ),
+                      ),
+                    ],
+                  )
+                : (editorState.attachedImageBytes != null
+                    ? Image.memory(
+                        editorState.attachedImageBytes!,
+                        width: size,
+                        height: size,
+                        fit: BoxFit.cover,
+                      )
+                    : const SizedBox.shrink()),
+          ),
+        ),
+
+        // Close button in top-left corner matching bottom dialogs
+        Positioned(
+          top: -4,
+          left: -4,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () {
+              HapticFeedback.lightImpact();
+              ref
+                  .read(inDrawerEditorControllerProvider.notifier)
+                  .removeAttachedImage();
             },
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF222226) : Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.20),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Icon(
+                CupertinoIcons.xmark_circle_fill,
+                size: 20,
+                color: isDark ? Colors.white70 : Colors.black45,
+              ),
+            ),
           ),
         ),
       ],

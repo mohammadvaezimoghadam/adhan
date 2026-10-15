@@ -1,5 +1,4 @@
-import 'package:flutter/foundation.dart';
-
+﻿
 abstract class AppConstants {
   // Base URLs
   static const String alQuranCloudBaseUrl = 'https://api.alquran.cloud/v1';
@@ -15,10 +14,15 @@ abstract class AppConstants {
   //   return 'http://127.0.0.1:8085/api/';
   // }
 
-  // OTA Patch Server (اتصال به سرور پچر VPS)
-  static String get patchServerBaseUrl => 'http://5.22.203.61';
+  // OTA Patch Server (اتصال به سرور پروداکشن)
+  // OTA Patch Server (قابلیت تنظیم داینامیک با --dart-define=OTA_SERVER_URL=... یا اتصال پیش‌فرض به سرور)
+  static const String patchServerBaseUrl = String.fromEnvironment(
+    'OTA_SERVER_URL',
+    defaultValue: 'http://5.22.203.61',
+  );
 
-  static const String patchAppId = 'quran_app';
+  static const String patchAppId = 'quran_tafakor';
+  static const String patchChannel = 'stable';
 
   // Assets Paths
   static const String ayahCardBgAsset = 'assets/images/ayah_card_bg.png';

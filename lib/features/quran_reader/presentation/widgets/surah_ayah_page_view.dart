@@ -14,6 +14,7 @@ import '../../domain/entities/ayah_entity.dart';
 import '../../domain/entities/ayah_theme_entity.dart';
 import '../../../quran_home/application/controllers/continue_reading_controller.dart';
 import '../../../study_plan/application/controllers/study_plan_controller.dart';
+import '../../../surah_list/infrastructure/datasources/static_surahs_data.dart';
 import 'ayah_list_item.dart';
 
 class SurahAyahPageView extends ConsumerStatefulWidget {
@@ -43,45 +44,114 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
   final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
   bool _hasScrolledToInitialAyah = false;
   bool _hasCompletedInitialScroll = false;
+  bool _hasUserScrolled = false;
+  bool _isAtScrollBottom = false;
 
-  void _updateReadingAndPlanProgress() {
+  int? _lastRecordedTopIndex;
+  DateTime? _lastProgressUpdateTime;
+
+  void _updateReadingAndPlanProgress({bool force = false}) {
     if (!mounted || !widget.isCurrentPage) return;
     try {
       final state = ref.read(quranReaderControllerProvider);
       if (state.ayahs.isEmpty) return;
 
+      // 1. Audio guard: if audio is actively playing, paused, or loading for this surah, audio listener
+      // is the single source of truth for reading position and progress!
+      // View movements triggered by auto-scroll must NOT trigger premature completion!
+      final audioState = ref.read(quranAudioControllerProvider);
+      final isAudioActive = (audioState.status == AudioStatus.playing ||
+              audioState.status == AudioStatus.paused ||
+              audioState.status == AudioStatus.loading) &&
+          audioState.currentSurahId == widget.surahId;
+      if (isAudioActive) {
+        return;
+      }
+
       final positions = _itemPositionsListener.itemPositions.value;
       if (positions.isEmpty) return;
 
-      final visiblePositions = positions.where((p) => p.itemTrailingEdge > 0);
-      if (visiblePositions.isEmpty) return;
+      final screenHeight = MediaQuery.sizeOf(context).height;
+      final effectiveTopPadding = widget.topPadding ?? 140.0;
+      final topCutoff = screenHeight > 0 ? (effectiveTopPadding / screenHeight) : 0.18;
+      final readingBaseline = topCutoff + (18.0 / (screenHeight > 0 ? screenHeight : 800.0));
 
-      final topIndex = visiblePositions
-          .reduce((min, current) => current.index < min.index ? current : min)
-          .index;
+      ItemPosition? topPosition;
+      for (final p in positions) {
+        if (p.itemLeadingEdge <= readingBaseline && p.itemTrailingEdge > readingBaseline) {
+          topPosition = p;
+          break;
+        }
+      }
 
-      final furthestIndex = visiblePositions
-          .reduce((max, current) => current.index > max.index ? current : max)
-          .index;
+      if (topPosition == null) {
+        final lastPos = positions.where((p) => p.index == state.ayahs.length - 1).firstOrNull;
+        if (lastPos != null && lastPos.itemTrailingEdge <= readingBaseline) {
+          topPosition = lastPos;
+        } else {
+          final visible = positions.where((p) => p.itemTrailingEdge > topCutoff).toList();
+          if (visible.isNotEmpty) {
+            topPosition = visible.reduce((min, cur) => cur.index < min.index ? cur : min);
+          } else {
+            topPosition = positions.reduce((min, cur) => cur.index < min.index ? cur : min);
+          }
+        }
+      }
 
-      if (topIndex >= 0 && topIndex < state.ayahs.length) {
-        final topAyah = state.ayahs[topIndex];
+      final topIndex = topPosition.index;
+
+      // The focused reading ayah: if user scrolled to the absolute bottom of the list, focus the last ayah!
+      final effectiveReadingIndex = (_isAtScrollBottom && _hasUserScrolled)
+          ? state.ayahs.length - 1
+          : topIndex;
+
+      // Deduplicate: if effective reading index hasn't changed, skip
+      if (!force && effectiveReadingIndex == _lastRecordedTopIndex) {
+        return;
+      }
+      _lastRecordedTopIndex = effectiveReadingIndex;
+
+      if (effectiveReadingIndex >= 0 && effectiveReadingIndex < state.ayahs.length) {
+        final readingAyah = state.ayahs[effectiveReadingIndex];
         ref.read(continueReadingControllerProvider.notifier).updateStateInMemory(
           surahId: widget.surahId,
           surahName: widget.surahName,
-          ayahNumber: topAyah.ayahNumber,
+          ayahNumber: readingAyah.ayahNumber,
           totalAyahs: state.ayahs.length,
         );
-      }
 
-      if (furthestIndex >= 0 && furthestIndex < state.ayahs.length) {
-        final furthestAyah = state.ayahs[furthestIndex];
-        ref.read(studyPlanControllerProvider.notifier).recordProgress(
-          surahId: widget.surahId,
-          page: furthestAyah.page,
-          juz: furthestAyah.juz,
-          hizb: furthestAyah.hizb,
-        );
+        // Check if the reading position has actually reached the end of this page/surah
+        final isNextAyahOnNextPage = effectiveReadingIndex + 1 < state.ayahs.length &&
+            state.ayahs[effectiveReadingIndex + 1].page != readingAyah.page;
+        final isLastAyahOfSurah = effectiveReadingIndex == state.ayahs.length - 1;
+        final isSurahEndingPage = isLastAyahOfSurah &&
+            (widget.surahId >= 114 ||
+                (widget.surahId < 114 &&
+                    readingAyah.page != null &&
+                    kStaticQuranSurahs[widget.surahId].startPage > readingAyah.page!));
+
+        final isLastAyahOfPage = isNextAyahOnNextPage || isSurahEndingPage;
+        final isEndOfPage = _hasUserScrolled && isLastAyahOfPage;
+
+        // Calculate live ayah-level fraction on this page
+        final ayahsOnThisPage = state.ayahs.where((a) => a.page == readingAyah.page).toList();
+        final ayahsReadOnThisPage = ayahsOnThisPage.where((a) => a.ayahNumber <= readingAyah.ayahNumber).length;
+        final pageFraction = ayahsOnThisPage.isNotEmpty
+            ? (ayahsReadOnThisPage / ayahsOnThisPage.length).clamp(0.0, 1.0)
+            : 0.0;
+
+        if (ref.read(isStudyPlanSessionActiveProvider)) {
+          ref.read(studyPlanControllerProvider.notifier).recordProgress(
+            surahId: widget.surahId,
+            surahName: widget.surahName,
+            ayahNumber: readingAyah.ayahNumber,
+            page: readingAyah.page,
+            juz: readingAyah.juz,
+            hizb: readingAyah.hizb,
+            isEndOfPage: isEndOfPage,
+            pageFraction: pageFraction,
+          );
+        }
       }
     } catch (_) {}
   }
@@ -330,12 +400,26 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
             totalAyahs: state.ayahs.length,
           );
 
-          ref.read(studyPlanControllerProvider.notifier).recordProgress(
-            surahId: widget.surahId,
-            page: currentPlayingAyah.page,
-            juz: currentPlayingAyah.juz,
-            hizb: currentPlayingAyah.hizb,
-          );
+          final ayahsOnThisPage = state.ayahs.where((a) => a.page == currentPlayingAyah.page).toList();
+          final ayahsReadOnThisPage = ayahsOnThisPage.where((a) => a.ayahNumber <= currentPlayingAyah.ayahNumber).length;
+          final pageFraction = ayahsOnThisPage.isNotEmpty
+              ? (ayahsReadOnThisPage / ayahsOnThisPage.length).clamp(0.0, 1.0)
+              : 0.0;
+
+          if (ref.read(isStudyPlanSessionActiveProvider)) {
+            // While audio is actively reciting this ayah, provide continuous fraction progress.
+            // Full page/goal completion is finalized when the audio track finishes in QuranAudioController!
+            ref.read(studyPlanControllerProvider.notifier).recordProgress(
+              surahId: widget.surahId,
+              surahName: widget.surahName,
+              ayahNumber: currentPlayingAyah.ayahNumber,
+              page: currentPlayingAyah.page,
+              juz: currentPlayingAyah.juz,
+              hizb: currentPlayingAyah.hizb,
+              isEndOfPage: false,
+              pageFraction: pageFraction,
+            );
+          }
 
           if (_itemScrollController.isAttached) {
             final isAudioPlaying = audioState.status == AudioStatus.playing;
@@ -435,6 +519,7 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
               final isUserDrag = (notification is ScrollStartNotification && notification.dragDetails != null) ||
                   (notification is ScrollUpdateNotification && notification.dragDetails != null);
               if (isUserDrag) {
+                _hasUserScrolled = true;
                 final audioState = ref.read(quranAudioControllerProvider);
                 final hasActiveSession = audioState.status == AudioStatus.playing || audioState.status == AudioStatus.paused;
                 final isThisSurah = audioState.currentSurahId == widget.surahId;
@@ -446,16 +531,35 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
                 }
               }
               
-              // Track reading progress during and on scroll end
-              if (notification is ScrollEndNotification ||
-                  notification is UserScrollNotification ||
-                  notification is ScrollUpdateNotification) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _updateReadingAndPlanProgress();
-                });
-              }
-              return false;
-            },
+                // Check scroll bottom using actual scroll metrics
+                final metrics = notification.metrics;
+                final atBottom = metrics.maxScrollExtent > 20 &&
+                    metrics.pixels >= (metrics.maxScrollExtent - 25);
+                if (_isAtScrollBottom != atBottom) {
+                  _isAtScrollBottom = atBottom;
+                }
+              
+                // Track reading progress: throttled (250ms) during active drag, immediate on scroll end
+                if (notification is ScrollEndNotification) {
+                  _lastProgressUpdateTime = null;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _updateReadingAndPlanProgress(force: true);
+                  });
+                } else if (notification is ScrollUpdateNotification) {
+                  if (notification.dragDetails != null) {
+                    _hasUserScrolled = true;
+                  }
+                  final now = DateTime.now();
+                  if (_lastProgressUpdateTime == null ||
+                      now.difference(_lastProgressUpdateTime!).inMilliseconds >= 250) {
+                    _lastProgressUpdateTime = now;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _updateReadingAndPlanProgress();
+                    });
+                  }
+                }
+                return false;
+              },
             child: ScrollablePositionedList.builder(
               key: ValueKey('surah_list_${widget.surahId}'),
               initialScrollIndex: _getInitialScrollIndex(state.ayahs),
@@ -465,7 +569,10 @@ class _SurahAyahPageViewState extends ConsumerState<SurahAyahPageView> {
                 left: context.isWideScreen ? 24.0 : 0.0,
                 right: context.isWideScreen ? 24.0 : 0.0,
                 top: widget.topPadding ?? (context.isWideScreen ? 16.0 : 0.0),
-                bottom: MediaQuery.viewPaddingOf(context).bottom + 140,
+                bottom: MediaQuery.viewPaddingOf(context).bottom +
+                    (MediaQuery.sizeOf(context).height > 0
+                        ? (MediaQuery.sizeOf(context).height * 0.85).clamp(450.0, 750.0)
+                        : 500.0),
               ),
               itemCount: state.ayahs.length,
               itemBuilder: (context, index) {

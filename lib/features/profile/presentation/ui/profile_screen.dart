@@ -13,6 +13,7 @@ import '../../../../common/extensions/string_extension.dart';
 import '../../../../common/utils/jalali_date.dart';
 import '../../../../core/routes/route_name.dart';
 import '../../../../common/widgets/app_snackbar.dart';
+import '../../../../common/widgets/app_modal_header.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../ota_update/application/controllers/ota_update_controller.dart';
 import '../../../ota_update/domain/entities/ota_patch.dart';
@@ -37,9 +38,6 @@ class ProfileScreen extends ConsumerWidget {
     final colors = context.colors;
     final colorScheme = context.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-
-
-
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -215,7 +213,7 @@ class ProfileScreen extends ConsumerWidget {
                 _buildProfileTile(
                   context: context,
                   title: 'تنظیمات برنامه',
-                  subtitle: 'قلم، تم، مدیریت ترجمه‌ها و اطلاعات نرم‌افزار',
+                  subtitle: 'قلم، تم، مدیریت ترجمه‌ها و برچسب‌ها',
                   onTap: () => context.pushNamed(settingsRoute),
                 ),
               ],
@@ -225,7 +223,22 @@ class ProfileScreen extends ConsumerWidget {
             // OTA Update Navigation Item
             const _OtaUpdateSection(),
             20.vSpace,
-            const _ProfileVersionFooter(),
+
+            // App Information Section
+            _buildSectionHeader('اطلاعات برنامه', isDark),
+            8.vSpace,
+            _buildGroupCard(
+              context: context,
+              children: [
+                _buildProfileTile(
+                  context: context,
+                  title: 'درباره قرآن تفکر',
+                  subtitle: 'معرفی و شناسنامه نرم‌افزار',
+                  onTap: () => _showAboutDialog(context),
+                ),
+              ],
+            ),
+            24.vSpace,
           ],
         ),
       ),
@@ -235,6 +248,84 @@ class ProfileScreen extends ConsumerWidget {
   }
 
 
+
+  void _showAboutDialog(BuildContext context) {
+    final colors = context.colors;
+    final colorScheme = context.colorScheme;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => Dialog(
+        backgroundColor: colors.dialogSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppModalHeader(
+                  title: 'درباره قرآن تفکر',
+                  onClose: () => Navigator.of(dialogCtx).pop(),
+                  bottomSpacing: 14,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'قرآن تفکر',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+                Text(
+                  'اپلیکیشن جامع قرآن تفکر با رسم‌الخط‌های استاندارد، ترجمه‌های معتبر، امکانات پیشرفته مطالعه، تلاوت قاریان برجسته و جستجوی هوشمند در آیات کلام‌الله مجید.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13,
+                    height: 1.6,
+                    color: colorScheme.onSurface.withValues(alpha: 0.85),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(dialogCtx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'بستن',
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildDivider(bool isDark) {
     return Divider(
@@ -475,10 +566,19 @@ class _OtaUpdateSection extends ConsumerWidget {
         otaUpdateControllerProvider.select((s) => s.isReadyToRestart));
     final patchVersion =
         ref.watch(otaUpdateControllerProvider.select((s) => s.patch?.version));
+    final isStoreRequired = ref.watch(
+        otaUpdateControllerProvider.select((s) => s.isStoreUpdateRequired));
+    final storeLatestVersion = ref.watch(
+        otaUpdateControllerProvider.select((s) => s.storeLatestVersion));
     final isNativeApk = ref.watch(
         otaUpdateControllerProvider.select((s) => s.patch?.isNativeApk == true));
     final currentPatch = ref.watch(
         otaUpdateControllerProvider.select((s) => s.currentPatchVersion));
+    final patch =
+        ref.watch(otaUpdateControllerProvider.select((s) => s.patch));
+    final lastNotes = ref.watch(
+        otaUpdateControllerProvider.select((s) => s.lastReleaseNotes));
+    final baseVersion = ref.watch(appVersionNameProvider);
 
     final colors = context.colors;
     final colorScheme = context.colorScheme;
@@ -488,6 +588,10 @@ class _OtaUpdateSection extends ConsumerWidget {
     if (isReadyToRestart) {
       subtitleText =
           'پچ جدید ($patchVersion) دانلود شد؛ در اجرای بعدی اعمال می‌شود';
+    } else if (isStoreRequired) {
+      subtitleText = (storeLatestVersion?.isNotEmpty == true)
+          ? 'نسخه جدید ($storeLatestVersion) در کافه‌بازار موجود است'
+          : 'نسخه جدید برنامه در کافه‌بازار موجود است';
     } else if (hasUpdate) {
       subtitleText = isNativeApk
           ? 'نسخه نصبی جدید ($patchVersion) آماده دریافت است'
@@ -535,9 +639,9 @@ class _OtaUpdateSection extends ConsumerWidget {
                   _showApplyConfirmDialog(context, patchVersion ?? '');
                   return;
                 }
-                if (hasUpdate) {
+                if (hasUpdate || isStoreRequired) {
                   debugPrint(
-                      '📱 [Profile/OTA] Showing OtaUpdateDialog (hasUpdate is true, version=$patchVersion)');
+                      '📱 [Profile/OTA] Showing OtaUpdateDialog (hasUpdate=$hasUpdate, isStoreRequired=$isStoreRequired)');
                   OtaUpdateDialog.show(context);
                   return;
                 }
@@ -551,10 +655,15 @@ class _OtaUpdateSection extends ConsumerWidget {
                 if (found) {
                   OtaUpdateDialog.show(context);
                 } else {
-                  AppSnackBar.showSuccess(
-                    context,
-                    'برنامه به آخرین نسخه مجهز است.',
-                  );
+                  final err = ref.read(otaUpdateControllerProvider).errorMessage;
+                  if (err != null && err.isNotEmpty) {
+                    AppSnackBar.showError(context, err);
+                  } else {
+                    AppSnackBar.showSuccess(
+                      context,
+                      'برنامه به آخرین نسخه مجهز است.',
+                    );
+                  }
                 }
               },
               child: Padding(
@@ -595,22 +704,26 @@ class _OtaUpdateSection extends ConsumerWidget {
                       ),
                     ),
                     8.hSpace,
-                    if (isReadyToRestart || hasUpdate) ...[
+                    if (isReadyToRestart || hasUpdate || isStoreRequired) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           color: isReadyToRestart
                               ? Colors.green
-                              : (isNativeApk
-                                  ? colorScheme.primary
-                                  : Colors.redAccent),
+                              : (isStoreRequired
+                                  ? Colors.amber.shade800
+                                  : (isNativeApk
+                                      ? colorScheme.primary
+                                      : Colors.redAccent)),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           isReadyToRestart
                               ? 'آماده اعمال'
-                              : (isNativeApk ? 'فایل APK' : 'نسخه جدید'),
+                              : (isStoreRequired
+                                  ? 'کافه‌بازار'
+                                  : (isNativeApk ? 'فایل APK' : 'نسخه جدید')),
                           style: const TextStyle(
                             fontFamily: AppTypography.fontFamily,
                             fontSize: 10,
@@ -621,10 +734,35 @@ class _OtaUpdateSection extends ConsumerWidget {
                       ),
                       6.hSpace,
                     ],
-                    Icon(
-                      CupertinoIcons.chevron_left,
-                      size: 13,
-                      color: isDark ? Colors.white38 : Colors.black38,
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        _showChangelogBottomSheet(
+                          context,
+                          patch,
+                          currentPatch,
+                          lastNotes,
+                          baseVersion,
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'مشاهده تغییرات',
+                          style: TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -635,11 +773,6 @@ class _OtaUpdateSection extends ConsumerWidget {
       ],
     );
   }
-}
-
-/// Clean version footer caption with changelog viewer
-class _ProfileVersionFooter extends ConsumerWidget {
-  const _ProfileVersionFooter();
 
   void _showChangelogBottomSheet(
     BuildContext context,
@@ -734,59 +867,6 @@ class _ProfileVersionFooter extends ConsumerWidget {
           ),
         );
       },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final currentPatch = ref.watch(
-        otaUpdateControllerProvider.select((s) => s.currentPatchVersion));
-    final lastNotes = ref.watch(
-        otaUpdateControllerProvider.select((s) => s.lastReleaseNotes));
-    final patch =
-        ref.watch(otaUpdateControllerProvider.select((s) => s.patch));
-    final baseVersion = ref.watch(appVersionNameProvider);
-    final versionDisplay = ref.watch(appVersionDisplayProvider);
-    final colorScheme = context.colorScheme;
-    final isDark = context.isDark;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Column(
-        children: [
-          Text(
-            versionDisplay,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 12,
-              color: isDark ? Colors.white38 : Colors.black45,
-            ),
-          ),
-          6.vSpace,
-          GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              _showChangelogBottomSheet(
-                context,
-                patch,
-                currentPatch,
-                lastNotes,
-                baseVersion,
-              );
-            },
-            child: Text(
-              'مشاهده تغییرات',
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: colorScheme.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

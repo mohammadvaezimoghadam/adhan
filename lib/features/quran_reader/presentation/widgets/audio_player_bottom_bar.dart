@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../../common/constants/app_constants.dart';
 import '../../../../common/extensions/context_extension.dart';
@@ -152,6 +153,7 @@ class AudioPlayerBottomBar extends ConsumerWidget {
           surahId: surahId,
         );
         if (!isReady) return;
+        if (!context.mounted) return;
 
         final ayahs = ref.read(quranReaderControllerProvider).ayahs;
         
@@ -160,9 +162,23 @@ class AudioPlayerBottomBar extends ConsumerWidget {
         if (itemPositionsListener != null && ayahs.isNotEmpty) {
           final positions = itemPositionsListener.itemPositions.value;
           if (positions.isNotEmpty) {
-            final visiblePositions = positions.where((p) => p.itemTrailingEdge > 0.05);
-            if (visiblePositions.isNotEmpty) {
-              final topPosition = visiblePositions.reduce((min, p) => p.index < min.index ? p : min);
+            final screenHeight = MediaQuery.sizeOf(context).height;
+            final topCutoff = screenHeight > 0 ? (140.0 / screenHeight) : 0.18;
+            final readingBaseline = topCutoff + 0.02;
+            ItemPosition? topPosition;
+            for (final p in positions) {
+              if (p.itemLeadingEdge <= readingBaseline && p.itemTrailingEdge > readingBaseline) {
+                topPosition = p;
+                break;
+              }
+            }
+            if (topPosition == null) {
+              final visiblePositions = positions.where((p) => p.itemTrailingEdge > topCutoff).toList();
+              if (visiblePositions.isNotEmpty) {
+                topPosition = visiblePositions.reduce((min, p) => p.index < min.index ? p : min);
+              }
+            }
+            if (topPosition != null) {
               final index = topPosition.index.clamp(0, ayahs.length - 1);
               visibleAyahNumber = ayahs[index].ayahNumber;
             }

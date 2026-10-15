@@ -30,7 +30,6 @@ import '../../../mini_audio_player/presentation/widgets/mini_audio_player_bar.da
 import '../widgets/audio_player_bottom_bar.dart';
 import '../widgets/quran_info_bar.dart';
 import '../widgets/quick_settings_drawer.dart';
-import '../widgets/sleep_timer_active_badge.dart';
 import '../widgets/surah_ayah_page_view.dart';
 import '../widgets/word_by_word_bottom_sheet.dart';
 import '../../domain/entities/ayah_theme_entity.dart';
@@ -39,12 +38,19 @@ import '../../../quick_access/presentation/widgets/bookmarks_manager_bottom_shee
 import '../../../bookmarks/presentation/widgets/ayah_bookmark_editor_bottom_sheet.dart';
 import '../../../../common/extensions/surah_name_extension.dart';
 import '../../../quran_home/application/controllers/continue_reading_controller.dart';
+import '../../../study_plan/domain/entities/study_plan.dart';
+import '../../../study_plan/application/controllers/study_plan_controller.dart';
+import '../../../study_plan/presentation/widgets/study_plan_quick_bottom_sheet.dart';
+import '../../../study_plan/presentation/widgets/study_plan_reader_bar.dart';
+import '../../../surah_list/infrastructure/datasources/static_surahs_data.dart';
 
 class QuranReaderScreen extends ConsumerStatefulWidget {
   final int surahId;
   final String surahName;
   final int? initialAyahNumber;
   final String? translationId;
+  final bool autoPlayAudio;
+  final bool isStudyPlan;
 
   const QuranReaderScreen({
     super.key,
@@ -52,6 +58,8 @@ class QuranReaderScreen extends ConsumerStatefulWidget {
     required this.surahName,
     this.initialAyahNumber,
     this.translationId,
+    this.autoPlayAudio = false,
+    this.isStudyPlan = false,
   });
 
   @override
@@ -86,10 +94,31 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
     // Fetch ayahs when screen loads & ensure clean normal controls state
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(isStudyPlanSessionActiveProvider.notifier).set(widget.isStudyPlan);
       _readerControlsNotifier.reset();
       ref.read(quranReaderControllerProvider.notifier).fetchAyahs(widget.surahId);
+
+      if (widget.autoPlayAudio) {
+        final targetAyah = widget.initialAyahNumber ?? 1;
+        final totalAyahs = widget.surahId >= 1 && widget.surahId <= 114
+            ? kStaticQuranSurahs[widget.surahId - 1].numberOfAyahs
+            : 7;
+        ref.read(quranAudioControllerProvider.notifier).playAyah(
+          surahId: widget.surahId,
+          ayahNumber: targetAyah,
+          totalAyahsInSurah: totalAyahs,
+        );
+      }
     });
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didUpdateWidget(QuranReaderScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isStudyPlan != widget.isStudyPlan) {
+      ref.read(isStudyPlanSessionActiveProvider.notifier).set(widget.isStudyPlan);
+    }
   }
 
   @override
@@ -103,6 +132,12 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
     );
     // Save reading progress when leaving screen
     _continueReadingNotifier.saveStateToStorage();
+    try {
+      ref.read(studyPlanControllerProvider.notifier).flushPendingSave();
+    } catch (_) {}
+    try {
+      ref.read(isStudyPlanSessionActiveProvider.notifier).set(false);
+    } catch (_) {}
     super.dispose();
   }
 
@@ -110,6 +145,7 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       _continueReadingNotifier.saveStateToStorage();
+      ref.read(studyPlanControllerProvider.notifier).flushPendingSave();
     }
   }
 
@@ -362,6 +398,7 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
       quranAudioControllerProvider.select((s) => s.currentSurahId),
       (previous, nextSurahId) {
         if (nextSurahId != null && nextSurahId != currentSurahId) {
+          ref.read(quranReaderControllerProvider.notifier).fetchAyahs(nextSurahId);
           final targetPageIndex = nextSurahId - 1;
           if (_pageController.hasClients && targetPageIndex >= 0 && targetPageIndex < 114) {
             _pageController.animateToPage(
@@ -373,6 +410,31 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
         }
       },
     );
+
+    // Listen to study plan goal completion
+    ref.listen<StudyPlan?>(todayGoalCompletedEventProvider, (prev, completedPlan) {
+      if (completedPlan != null) {
+        ref.read(todayGoalCompletedEventProvider.notifier).clear();
+        HapticFeedback.lightImpact();
+        // Stop audio immediately when today's goal is completed
+        final audioState = ref.read(quranAudioControllerProvider);
+        if (audioState.status == AudioStatus.playing || audioState.status == AudioStatus.loading) {
+          ref.read(quranAudioControllerProvider.notifier).stop();
+        }
+        AppSnackBar.showInfo(
+          context,
+          'هدف مطالعه امروز تکمیل شد.',
+        );
+      }
+    });
+
+    // Listen to jump target from StudyPlanQuickBottomSheet
+    ref.listen(studyPlanJumpTargetProvider, (prev, target) {
+      if (target != null) {
+        ref.read(studyPlanJumpTargetProvider.notifier).clear();
+        _handleTargetSelected(target);
+      }
+    });
 
     // Determine if audio is playing for a DIFFERENT surah
     final isAudioPlayingOtherSurah = ref.watch(
@@ -396,7 +458,14 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
     final double appBarHeight = topPadding + 60.0;
 
     final double infoBarHeight = 40.0;
-    final double headerHeight = appBarHeight + infoBarHeight;
+    final bool isSessionActive = ref.watch(isStudyPlanSessionActiveProvider);
+    final bool hasActivePlan = isSessionActive && ref.watch(
+      studyPlanControllerProvider.select(
+        (s) => s.activePlan != null && s.activePlan!.status == StudyPlanStatus.active,
+      ),
+    );
+    final double studyPlanBarHeight = hasActivePlan ? 32.0 : 0.0;
+    final double headerHeight = appBarHeight + infoBarHeight + studyPlanBarHeight;
 
     final ayahThemeId = ref.watch(
       quranDisplaySettingsControllerProvider.select((s) => s.ayahThemeId),
@@ -420,6 +489,7 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
             overlays: SystemUiOverlay.values,
           );
           ref.read(readerControlsProvider.notifier).reset();
+          ref.read(isStudyPlanSessionActiveProvider.notifier).set(false);
         }
       },
       child: Scaffold(
@@ -527,6 +597,7 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                     overlays: SystemUiOverlay.values,
                                   );
                                   ref.read(readerControlsProvider.notifier).reset();
+                                  ref.read(isStudyPlanSessionActiveProvider.notifier).set(false);
                                   Navigator.of(context).maybePop();
                                 },
                                 onSurahTap: () async {
@@ -659,8 +730,12 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                  }
                                } else if (value == 'settings') {
                                  QuickSettingsDrawer.show(context);
-                               } else if (value == 'sleep_timer') {
-                                 SleepTimerDialog.show(context);
+                               } else if (value == 'study_plan') {
+                                 StudyPlanQuickBottomSheet.show(context).then((target) {
+                                   if (target != null && mounted) {
+                                     _handleTargetSelected(target);
+                                   }
+                                 });
                                } else if (value == 'bookmarks') {
                                  BookmarksManagerBottomSheet.show(context);
                                } else if (value == 'toggle_brackets') {
@@ -675,14 +750,14 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                final removeBrackets = ref.watch(quranDisplaySettingsControllerProvider.select((s) => s.removeTranslationBrackets));
                                return [
                                  const PopupMenuItem<String>(
-                                   value: 'settings',
+                                   value: 'study_plan',
                                    child: Row(
                                      mainAxisSize: MainAxisSize.min,
                                      children: [
-                                       Icon(CupertinoIcons.slider_horizontal_3, size: 18),
+                                       Icon(CupertinoIcons.calendar_today, size: 18),
                                        SizedBox(width: 8),
                                        Text(
-                                         'تنظیمات نمایش',
+                                         'برنامه مطالعه',
                                          style: TextStyle(
                                            fontFamily: AppTypography.fontFamily,
                                            fontSize: 13,
@@ -692,14 +767,14 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                                    ),
                                  ),
                                  const PopupMenuItem<String>(
-                                   value: 'sleep_timer',
+                                   value: 'settings',
                                    child: Row(
                                      mainAxisSize: MainAxisSize.min,
                                      children: [
-                                       Icon(CupertinoIcons.timer, size: 18),
+                                       Icon(CupertinoIcons.slider_horizontal_3, size: 18),
                                        SizedBox(width: 8),
                                        Text(
-                                         'تایمر خواب تلاوت',
+                                         'تنظیمات نمایش',
                                          style: TextStyle(
                                            fontFamily: AppTypography.fontFamily,
                                            fontSize: 13,
@@ -773,6 +848,9 @@ class _QuranReaderScreenState extends ConsumerState<QuranReaderScreen> with Widg
                        ),
                         QuranInfoBar(
                           onTargetSelected: _handleTargetSelected,
+                        ),
+                        StudyPlanReaderBar(
+                          onJumpToTarget: _handleTargetSelected,
                         ),
                       ],
                     ),

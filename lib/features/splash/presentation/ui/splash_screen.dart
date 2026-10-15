@@ -6,22 +6,17 @@ import '../../../../core/routes/route_name.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../ota_update/application/controllers/ota_update_controller.dart';
-import '../../../ota_update/presentation/widgets/ota_update_dialog.dart';
-
-class SplashScreen extends ConsumerStatefulWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  ConsumerState<SplashScreen> createState() => _SplashScreenState();
+  State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends ConsumerState<SplashScreen>
+class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   late final AnimationController _entryController;
   late final AnimationController _shimmerController;
-  bool _isForceUpdating = false;
 
   late final Animation<double> _fadeAnimation;
   late final Animation<double> _scaleAnimation;
@@ -86,49 +81,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       } catch (_) {}
     }
 
-    debugPrint('🚀 [Splash/OTA] Checking update...');
-    final splashMinWait = Future.delayed(const Duration(milliseconds: 1200));
-    final updateFuture = ref
-        .read(otaUpdateControllerProvider.notifier)
-        .checkForUpdate()
-        .timeout(const Duration(milliseconds: 2500), onTimeout: () => false);
-
-    // Parallel wait for splash animation and update check
-    await Future.wait([splashMinWait, updateFuture]);
+    // انیمیشن سریع اسپلش بدون توقف روی شبکه (بررسی آپدیت در هوم انجام می‌شود)
+    await Future.delayed(const Duration(milliseconds: 1000));
     if (!mounted) return;
-
-    final otaState = ref.read(otaUpdateControllerProvider);
-    // If force update detected, show loading text and apply update
-    if (otaState.hasUpdate && otaState.patch?.isForce == true) {
-      debugPrint('🛑 [Splash/OTA] Force update detected!');
-      if (mounted) {
-        setState(() {
-          _isForceUpdating = true;
-        });
-      }
-
-      if (otaState.patch!.isNativeApk) {
-        // برای نسخه نصبی APK، دیالوگ مستقیم را نشان می‌دهیم
-        await OtaUpdateDialog.show(context, isForce: true);
-        return;
-      }
-
-      // برای پچ دارت اجباری: دانلود و اعمال مستقیم در اسپلش با متن «در حال به‌روزرسانی...»
-      final success = await ref
-          .read(otaUpdateControllerProvider.notifier)
-          .startDownloadAndApply();
-
-      if (success) {
-        debugPrint('🔄 [Splash/OTA] Force patch downloaded and ready. Restarting app...');
-        await OtaUpdateController.restartApp();
-        return;
-      } else {
-        if (mounted) {
-          await OtaUpdateDialog.show(context, isForce: true);
-        }
-        return;
-      }
-    }
 
     if (mounted) {
       try {
@@ -217,16 +172,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        _isForceUpdating ? 'در حال به‌روزرسانی...' : 'گروه تفکر',
+                        'گروه تفکر',
                         style: TextStyle(
                           fontFamily: AppTypography.fontFamily,
-                          fontSize: _isForceUpdating ? 14 : 13,
-                          fontWeight: _isForceUpdating
-                              ? FontWeight.bold
-                              : FontWeight.w600,
-                          color: _isForceUpdating
-                              ? AppColors.primary
-                              : AppColors.primary.withValues(alpha: 0.85),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary.withValues(alpha: 0.85),
                           letterSpacing: 0.4,
                         ),
                       ),

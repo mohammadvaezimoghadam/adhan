@@ -7,15 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../common/extensions/context_extension.dart';
 import '../../../../common/extensions/size_extension.dart';
 // import '../../../../common/extensions/string_extension.dart';
-import '../../../../common/widgets/app_modal_header.dart';
-// import '../../../../core/routes/route_name.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../bookmarks/presentation/widgets/manage_labels_bottom_sheet.dart';
 import '../../../main_navigation/application/tab_navigation_controller.dart';
 import '../../../quran_reader/presentation/widgets/quick_settings_drawer.dart';
-// import '../../../subscription/application/vip_subscription_controller.dart';
 import '../../../translation_manager/presentation/widgets/translation_manager_bottom_sheet.dart';
-import '../../../ota_update/application/controllers/ota_update_controller.dart';
 
 /// Clean Apple-Style Settings Screen with Profile & Subscription Integration
 class SettingsScreen extends ConsumerWidget {
@@ -33,7 +29,6 @@ class SettingsScreen extends ConsumerWidget {
     final colors = context.colors;
     final colorScheme = context.colorScheme;
     final isDark = context.isDark;
-    final versionDisplay = ref.watch(appVersionDisplayProvider);
     // final isVip = ref.watch(hasVipAccessProvider);
     // final vipState = ref.watch(vipSubscriptionControllerProvider);
 
@@ -200,109 +195,7 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ],
           ),
-          18.vSpace,
-
-          // Section 4: App Information (No icon, uniform styling)
-          _buildSectionHeader('اطلاعات برنامه', isDark),
-          6.vSpace,
-          _buildGroupCard(
-            context: context,
-            children: [
-              _buildSettingsTile(
-                context: context,
-                title: 'درباره قرآن تفکر',
-                subtitle: versionDisplay,
-                onTap: () => _showAboutDialog(context, versionDisplay),
-              ),
-            ],
-          ),
         ],
-      ),
-    );
-  }
-
-  void _showAboutDialog(BuildContext context, String versionDisplay) {
-    final colors = context.colors;
-    final colorScheme = context.colorScheme;
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => Dialog(
-        backgroundColor: colors.dialogSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Directionality(
-          textDirection: TextDirection.rtl,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppModalHeader(
-                  title: 'درباره قرآن تفکر',
-                  onClose: () => Navigator.of(dialogCtx).pop(),
-                  bottomSpacing: 14,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'قرآن تفکر',
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  versionDisplay,
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'اپلیکیشن جامع قرآن تفکر با رسم‌الخط‌های استاندارد، ترجمه‌های معتبر، امکانات پیشرفته مطالعه، تلاوت قاریان برجسته و جستجوی هوشمند در آیات کلام‌الله مجید.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 13,
-                    height: 1.6,
-                    color: colorScheme.onSurface.withValues(alpha: 0.85),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(dialogCtx).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colorScheme.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'بستن',
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

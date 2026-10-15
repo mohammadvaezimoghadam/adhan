@@ -9,6 +9,9 @@ import '../../../quran_home/presentation/ui/quran_home_screen.dart';
 import '../../../profile/presentation/ui/profile_screen.dart';
 import '../../../search/presentation/ui/search_screen.dart';
 import '../../../surah_list/presentation/ui/surah_list_screen.dart';
+import '../../../ota_update/application/controllers/ota_update_controller.dart';
+import '../../../ota_update/application/controllers/ota_update_state.dart';
+import '../../../ota_update/presentation/widgets/ota_update_dialog.dart';
 import '../../application/tab_navigation_controller.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../widgets/app_navigation_rail.dart';
@@ -34,6 +37,35 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   final Set<int> _loadedTabs = {0};
   final Map<int, Widget> _tabCache = {};
   DateTime? _lastBackPressTime;
+  bool _isForceDialogShowing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // بررسی خودکار به‌روزرسانی به محض ورود به شل اصلی برنامه
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final currentOta = ref.read(otaUpdateControllerProvider);
+      final isMandatoryInitial = (currentOta.hasUpdate &&
+              currentOta.patch?.isForce == true) ||
+          (currentOta.isStoreUpdateRequired && currentOta.storeIsMandatory);
+
+      if (isMandatoryInitial && !_isForceDialogShowing) {
+        _isForceDialogShowing = true;
+        OtaUpdateDialog.show(context, isForce: true).then((_) {
+          _isForceDialogShowing = false;
+        });
+      }
+      ref.read(otaUpdateControllerProvider.notifier).checkForUpdate();
+    });
+
+    // Crash Guard: ریست کردن شمارنده کرش بعد از ۳ ثانیه پایداری اجرای برنامه
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        ref.read(otaUpdateControllerProvider.notifier).resetCrashCounter();
+      }
+    });
+  }
 
   Widget _getOrCreateTabWidget(int index) {
     return _tabCache.putIfAbsent(index, () {
@@ -101,6 +133,28 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
     ) {
       if (previous?.currentIndex != next.currentIndex) {
         FocusManager.instance.primaryFocus?.unfocus();
+      }
+    });
+
+    // در صورت وجود به‌روزرسانی اجباری (پچ یا استور)، دیالوگ فوراً باز می‌شود
+    ref.listen<OtaUpdateState>(otaUpdateControllerProvider, (previous, next) {
+      final isMandatory = (next.hasUpdate && next.patch?.isForce == true) ||
+          (next.isStoreUpdateRequired && next.storeIsMandatory);
+
+      if (isMandatory && !_isForceDialogShowing && context.mounted) {
+        _isForceDialogShowing = true;
+        OtaUpdateDialog.show(context, isForce: true).then((_) {
+          _isForceDialogShowing = false;
+        });
+      } else if (next.isStoreUpdateRequired &&
+          !next.storeIsMandatory &&
+          previous?.status != OtaStatus.storeUpdateRequired &&
+          !_isForceDialogShowing &&
+          context.mounted) {
+        _isForceDialogShowing = true;
+        OtaUpdateDialog.show(context, isForce: false).then((_) {
+          _isForceDialogShowing = false;
+        });
       }
     });
 

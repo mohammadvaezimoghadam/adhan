@@ -10,6 +10,7 @@ import '../../../../common/extensions/string_extension.dart';
 import '../../../../common/extensions/surah_name_extension.dart';
 import '../../../../common/widgets/app_modal_header.dart';
 import '../../../../common/widgets/app_snackbar.dart';
+import '../../../audio_sleep_timer/presentation/ui/sleep_timer_screen.dart';
 import '../../../../core/services/audio/sleep_timer/sleep_timer_condition.dart';
 import '../../../../core/services/audio/sleep_timer/sleep_timer_controller.dart';
 import '../../../../core/theme/app_dimens.dart';
@@ -225,6 +226,34 @@ class SleepTimerPlayerButton extends ConsumerWidget {
             ],
           ),
         ),
+
+        const PopupMenuDivider(height: 1),
+
+        // Open full screen
+        PopupMenuItem<String>(
+          value: 'open_screen',
+          height: 38,
+          child: Row(
+            textDirection: TextDirection.rtl,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'تنظیمات پیشرفته تایمر...',
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              Icon(
+                CupertinoIcons.slider_horizontal_3,
+                size: 16,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       ],
     );
 
@@ -251,6 +280,16 @@ class SleepTimerPlayerButton extends ConsumerWidget {
     String surahName,
   ) {
     HapticFeedback.lightImpact();
+
+    if (value == 'open_screen') {
+      final audioAyah = ref.read(quranAudioControllerProvider).currentAyahNumber;
+      SleepTimerScreen.open(
+        context,
+        initialSurahId: currentSurahId,
+        initialAyahNumber: audioAyah ?? 1,
+      );
+      return;
+    }
 
     if (value == 'cancel') {
       ref.read(sleepTimerControllerProvider.notifier).cancel();
@@ -459,23 +498,19 @@ class SleepTimerPlayerButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final timerState = ref.watch(sleepTimerControllerProvider);
-    final isActive = timerState.isActive;
+    final isTimerActive = timerState.isActive;
 
-    if (showOnlyWhenActive && !isActive) {
+    if (showOnlyWhenActive && !isTimerActive) {
       return const SizedBox.shrink();
     }
 
     final colorScheme = context.colorScheme;
-    final colors = context.colors;
-    final primaryColor = colorScheme.primary;
 
     return Semantics(
-      label: isActive ? 'مدیریت تایمر خواب' : 'تنظیم تایمر خواب',
+      label: isTimerActive ? 'تایمر خواب فعال است' : 'تنظیم تایمر خواب تلاوت',
       button: true,
       child: Tooltip(
-        message: isActive
-            ? 'تایمر خواب فعال است (برای مدیریت ضربه بزنید)'
-            : 'تنظیم تایمر خواب',
+        message: isTimerActive ? 'تایمر خواب فعال است' : 'تنظیم تایمر خواب',
         child: SizedBox(
           width: width,
           height: height,
@@ -483,39 +518,26 @@ class SleepTimerPlayerButton extends ConsumerWidget {
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(8),
-              onTap: () => _openMenu(context, ref),
+              onTap: () {
+                HapticFeedback.lightImpact();
+                final audioState = ref.read(quranAudioControllerProvider);
+                final readerState = ref.read(quranReaderControllerProvider);
+                SleepTimerScreen.open(
+                  context,
+                  initialSurahId: audioState.currentSurahId ?? readerState.currentSurahId,
+                  initialAyahNumber: audioState.currentAyahNumber,
+                );
+              },
+              onLongPress: () => _openMenu(context, ref),
               child: Center(
-                child: Stack(
-                  alignment: Alignment.center,
-                  clipBehavior: Clip.none,
-                  children: [
-                    Icon(
-                      isActive
-                          ? CupertinoIcons.timer_fill
-                          : CupertinoIcons.timer,
-                      size: size,
-                      color: isActive
-                          ? primaryColor
-                          : colorScheme.onSurfaceVariant,
-                    ),
-                    if (isActive)
-                      Positioned(
-                        top: -2,
-                        right: -3,
-                        child: Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: primaryColor,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: colors.cardBackground,
-                              width: 1.2,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                child: Icon(
+                  isTimerActive
+                      ? CupertinoIcons.timer_fill
+                      : CupertinoIcons.timer,
+                  size: size,
+                  color: isTimerActive
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                 ),
               ),
             ),
@@ -540,87 +562,94 @@ class SleepTimerActiveBadge extends ConsumerWidget {
     final colorScheme = context.colorScheme;
     final primary = colorScheme.primary;
 
-    String label = '';
-    if (condition is TimerCondition) {
-      final rem = timerState.remainingTime ?? Duration.zero;
-      final m = rem.inMinutes;
-      final s = rem.inSeconds % 60;
-      final timeStr =
-          '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}'
-              .toPersianDigit();
-      label = 'تایمر: $timeStr';
-    } else if (condition is EndOfSurahCondition) {
-      label = 'تا پایان سوره ${condition.surahId.surahNameFa}';
-    } else if (condition is EndOfHizbCondition) {
-      label = 'تا پایان حزب ${condition.hizb.toPersianDigit()}';
-    } else if (condition is TargetAyahCondition) {
-      label = 'توقف در آیه ${condition.targetAyahNumber.toPersianDigit()}';
+    // Only display real-time countdown badge in the final 10 seconds before cutoff
+    if (condition is! TimerCondition) {
+      return const SizedBox.shrink();
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Center(
-        child: Material(
-          color: Colors.transparent,
-          elevation: 3,
-          borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: context.colors.cardBackground,
-              borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-              border: Border.all(
-                color: primary.withValues(alpha: 0.5),
-                width: 1.0,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: primary.withValues(alpha: 0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  CupertinoIcons.timer_fill,
-                  size: 14,
-                  color: primary,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Quick Cancel Button
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    ref.read(sleepTimerControllerProvider.notifier).cancel();
-                  },
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.all(2.0),
-                    child: Icon(
-                      CupertinoIcons.xmark_circle_fill,
-                      size: 15,
-                      color: Colors.redAccent.withValues(alpha: 0.8),
+    final rem = timerState.remainingTime ?? Duration.zero;
+    final sec = rem.inSeconds;
+    final isFinalSeconds = sec > 0 && sec <= 10;
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: SizeTransition(
+            sizeFactor: animation,
+            child: child,
+          ),
+        );
+      },
+      child: isFinalSeconds
+          ? Padding(
+              key: const ValueKey('sleep_timer_countdown_active'),
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Center(
+                child: Material(
+                  color: Colors.transparent,
+                  elevation: 3,
+                  borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: context.colors.cardBackground,
+                      borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+                      border: Border.all(
+                        color: primary.withValues(alpha: 0.5),
+                        width: 1.0,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primary.withValues(alpha: 0.15),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          CupertinoIcons.timer_fill,
+                          size: 14,
+                          color: primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'توقف تلاوت در ${sec.toPersianDigit()} ثانیه',
+                          style: TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Quick Cancel Button
+                        GestureDetector(
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            ref.read(sleepTimerControllerProvider.notifier).cancel();
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: const EdgeInsets.all(2.0),
+                            child: Icon(
+                              CupertinoIcons.xmark_circle_fill,
+                              size: 15,
+                              color: Colors.redAccent.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-      ),
+              ),
+            )
+          : const SizedBox.shrink(key: ValueKey('sleep_timer_countdown_hidden')),
     );
   }
 }

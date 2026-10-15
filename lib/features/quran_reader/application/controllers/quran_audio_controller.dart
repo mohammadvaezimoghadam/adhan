@@ -24,6 +24,8 @@ import '../../../subscription/application/vip_subscription_controller.dart';
 import '../../../subscription/domain/models/vip_subscription_state.dart';
 import '../../../subscription/domain/policy/audio_vip_policy.dart';
 import '../../../surah_list/infrastructure/datasources/static_surahs_data.dart';
+import '../../../study_plan/application/controllers/study_plan_controller.dart';
+import '../../../study_plan/domain/entities/study_plan.dart';
 
 final quranAudioControllerProvider =
     NotifierProvider<QuranAudioController, QuranAudioState>(
@@ -343,7 +345,96 @@ class QuranAudioController extends Notifier<QuranAudioState> {
       }
     }
 
-    if (!state.isAutoPlayNext || state.isSingleAyahMode || currentAyah >= totalAyahs) {
+    // ── Check Study Plan Progress for the Ayah that just finished ──
+    final isStudySession = ref.read(isStudyPlanSessionActiveProvider);
+    final activePlan = ref.read(studyPlanControllerProvider.select((s) => s.activePlan));
+    final isPlanActive = isStudySession && activePlan != null && activePlan.status == StudyPlanStatus.active;
+
+    if (isPlanActive) {
+      final readerState = ref.read(quranReaderControllerProvider);
+      AyahEntity? finishedAyah;
+      if (readerState.currentSurahId == surahId && readerState.ayahs.isNotEmpty) {
+        finishedAyah = readerState.ayahs.where((a) => a.ayahNumber == currentAyah).firstOrNull;
+      }
+
+      final page = finishedAyah?.page;
+      final juz = finishedAyah?.juz;
+      final hizb = finishedAyah?.hizb;
+
+      bool isEndOfPage = false;
+      double pageFraction = 1.0;
+
+      if (finishedAyah != null && readerState.ayahs.isNotEmpty) {
+        final targetIndex = readerState.ayahs.indexWhere((a) => a.ayahNumber == currentAyah);
+        if (targetIndex != -1) {
+          final isNextAyahOnNextPage = targetIndex + 1 < readerState.ayahs.length &&
+              readerState.ayahs[targetIndex + 1].page != finishedAyah.page;
+          final isLastAyahOfSurah = targetIndex == readerState.ayahs.length - 1;
+          final isSurahEndingPage = isLastAyahOfSurah &&
+              (surahId >= 114 ||
+                  (surahId < 114 &&
+                      page != null &&
+                      kStaticQuranSurahs[surahId].startPage > page));
+          isEndOfPage = isNextAyahOnNextPage || isSurahEndingPage;
+
+          final ayahsOnPage = readerState.ayahs.where((a) => a.page == page).toList();
+          final ayahsRead = ayahsOnPage.where((a) => a.ayahNumber <= currentAyah).length;
+          pageFraction = ayahsOnPage.isNotEmpty
+              ? (ayahsRead / ayahsOnPage.length).clamp(0.0, 1.0)
+              : 1.0;
+        }
+      }
+
+      await ref.read(studyPlanControllerProvider.notifier).recordProgress(
+        surahId: surahId,
+        ayahNumber: currentAyah,
+        page: page,
+        juz: juz,
+        hizb: hizb,
+        isEndOfPage: isEndOfPage,
+        pageFraction: pageFraction,
+      );
+
+      // If today's goal is reached and completed, stop playback immediately!
+      final updatedPlan = ref.read(studyPlanControllerProvider).activePlan;
+      if (updatedPlan != null && updatedPlan.isTodayCompleted) {
+        debugPrint('🎯 [QuranAudioController] Today\'s study plan goal completed! Stopping audio.');
+        _isTransitioningTrack = false;
+        await stop();
+        return;
+      }
+    }
+
+    if (!state.isAutoPlayNext || state.isSingleAyahMode) {
+      _isTransitioningTrack = false;
+      await stop();
+      return;
+    }
+
+    // Check if reached end of current Surah
+    if (currentAyah >= totalAyahs) {
+      // If in study plan session and goal not reached yet, advance to next surah!
+      if (isPlanActive && surahId < 114) {
+        final nextSurahId = surahId + 1;
+        final nextTotalAyahs = kStaticQuranSurahs[nextSurahId - 1].numberOfAyahs;
+        debugPrint(
+          '📖 [QuranAudioController] Study plan continues into next Surah: $nextSurahId',
+        );
+
+        state = state.copyWith(status: AudioStatus.loading);
+        _isTransitioningTrack = true;
+
+        await _playTrack(
+          surahId: nextSurahId,
+          ayahNumber: 1,
+          totalAyahsInSurah: nextTotalAyahs,
+          trackType: targetTrack,
+          isSingleAyahMode: state.isSingleAyahMode,
+        );
+        return;
+      }
+
+      // Normal reading or last surah of Quran: stop!
       _isTransitioningTrack = false;
       await stop();
       return;
@@ -729,6 +820,7 @@ class QuranAudioController extends Notifier<QuranAudioState> {
     _isTransitioningTrack = false;
     final audioService = ref.read(audioPlayerServiceProvider);
     await audioService.stop();
+    await audioService.setVolume(1.0);
     
     // Explicitly tell the Android MediaSession (AudioHandler) to stop and dismiss the notification
     await ref.read(quranAudioHandlerProvider).stop();

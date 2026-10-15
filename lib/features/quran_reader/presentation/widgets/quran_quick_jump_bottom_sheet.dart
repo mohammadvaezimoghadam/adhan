@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../../common/extensions/context_extension.dart';
 import '../../../../common/extensions/int_extension.dart';
@@ -597,11 +598,23 @@ class _QuranQuickJumpBottomSheetState
       if (itemPositionsListener != null) {
         final positions = itemPositionsListener.itemPositions.value;
         if (positions.isNotEmpty) {
-          final visiblePositions = positions.where((p) => p.itemTrailingEdge > 0);
-          if (visiblePositions.isNotEmpty) {
-            currentIndex = visiblePositions
-                .reduce((min, current) => current.index < min.index ? current : min)
-                .index;
+          const topCutoff = 0.18;
+          const readingBaseline = 0.20;
+          ItemPosition? targetPos;
+          for (final p in positions) {
+            if (p.itemLeadingEdge <= readingBaseline && p.itemTrailingEdge > readingBaseline) {
+              targetPos = p;
+              break;
+            }
+          }
+          if (targetPos == null) {
+            final visiblePositions = positions.where((p) => p.itemTrailingEdge > topCutoff).toList();
+            if (visiblePositions.isNotEmpty) {
+              targetPos = visiblePositions.reduce((min, cur) => cur.index < min.index ? cur : min);
+            }
+          }
+          if (targetPos != null) {
+            currentIndex = targetPos.index;
           }
         }
       }

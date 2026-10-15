@@ -43,11 +43,14 @@ class OtaPatch {
       md5: (json['md5'] ?? '') as String,
       sha256: (json['sha256'] ?? '') as String,
       sizeBytes: (json['size_bytes'] as num?)?.toInt() ?? 0,
-      isForce: json['is_force'] == true || json['is_force'] == 1,
+      isForce: json['is_mandatory'] == true ||
+          json['is_mandatory'] == 1 ||
+          json['is_force'] == true ||
+          json['is_force'] == 1,
       targetVersionCode: (json['target_version_code'] as num?)?.toInt() ??
           (json['version_code'] as num?)?.toInt() ??
           1,
-      releaseNotes: (json['release_notes'] ?? '') as String,
+      releaseNotes: (json['change_log'] ?? json['release_notes'] ?? '') as String,
       createdAt: (json['created_at'] ?? '') as String,
       updateType: (json['update_type'] ?? 'patch') as String,
     );

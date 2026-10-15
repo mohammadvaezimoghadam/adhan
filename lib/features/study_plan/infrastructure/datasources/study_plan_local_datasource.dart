@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive/hive.dart';
 
+import '../../../../core/data/local/hive/hive_service_provider.dart';
+import '../../../../core/data/local/hive/i_hive_service.dart';
 import '../../domain/entities/study_plan.dart';
 
 abstract class IStudyPlanLocalDataSource {
@@ -18,25 +19,14 @@ class StudyPlanLocalDataSource implements IStudyPlanLocalDataSource {
   static const String boxName = 'study_plans_box';
   static const String _activePlanIdKey = '_active_plan_id_meta_key';
 
-  Box? _box;
+  final IHiveService _hiveService;
 
-  Future<Box> _getBox() async {
-    if (_box != null && _box!.isOpen) {
-      return _box!;
-    }
-    if (Hive.isBoxOpen(boxName)) {
-      _box = Hive.box(boxName);
-      return _box!;
-    }
-    _box = await Hive.openBox(boxName);
-    return _box!;
-  }
+  StudyPlanLocalDataSource(this._hiveService);
 
   @override
   Future<void> savePlan(StudyPlan plan) async {
     try {
-      final box = await _getBox();
-      await box.put(plan.id, plan.toMap());
+      await _hiveService.put(plan.id, plan.toMap(), boxName: boxName);
     } catch (e) {
       debugPrint('⚠️ [StudyPlanDataSource] Error saving plan: $e');
     }
@@ -45,8 +35,7 @@ class StudyPlanLocalDataSource implements IStudyPlanLocalDataSource {
   @override
   Future<void> deletePlan(String id) async {
     try {
-      final box = await _getBox();
-      await box.delete(id);
+      await _hiveService.delete(id, boxName: boxName);
       if (getActivePlanId() == id) {
         await setActivePlanId(null);
       }
@@ -58,8 +47,7 @@ class StudyPlanLocalDataSource implements IStudyPlanLocalDataSource {
   @override
   Future<StudyPlan?> getPlan(String id) async {
     try {
-      final box = await _getBox();
-      final val = box.get(id);
+      final val = _hiveService.get(id, boxName: boxName);
       if (val is Map) {
         return StudyPlan.fromMap(val);
       }
@@ -72,14 +60,15 @@ class StudyPlanLocalDataSource implements IStudyPlanLocalDataSource {
   @override
   Future<List<StudyPlan>> getAllPlans() async {
     try {
-      final box = await _getBox();
+      final values = _hiveService.getValues(boxName: boxName);
       final plans = <StudyPlan>[];
-      for (final key in box.keys) {
-        if (key == _activePlanIdKey) continue;
-        final val = box.get(key);
+      for (final val in values) {
         if (val is Map) {
           try {
-            plans.add(StudyPlan.fromMap(val));
+            final map = Map<dynamic, dynamic>.from(val);
+            if (map['id'] != null) {
+              plans.add(StudyPlan.fromMap(map));
+            }
           } catch (_) {}
         }
       }
@@ -95,11 +84,10 @@ class StudyPlanLocalDataSource implements IStudyPlanLocalDataSource {
   @override
   Future<void> setActivePlanId(String? id) async {
     try {
-      final box = await _getBox();
       if (id == null) {
-        await box.delete(_activePlanIdKey);
+        await _hiveService.delete(_activePlanIdKey, boxName: boxName);
       } else {
-        await box.put(_activePlanIdKey, id);
+        await _hiveService.put(_activePlanIdKey, id, boxName: boxName);
       }
     } catch (e) {
       debugPrint('⚠️ [StudyPlanDataSource] Error setting active plan id: $e');
@@ -109,12 +97,8 @@ class StudyPlanLocalDataSource implements IStudyPlanLocalDataSource {
   @override
   String? getActivePlanId() {
     try {
-      if (_box != null && _box!.isOpen) {
-        return _box!.get(_activePlanIdKey)?.toString();
-      }
-      if (Hive.isBoxOpen(boxName)) {
-        return Hive.box(boxName).get(_activePlanIdKey)?.toString();
-      }
+      final val = _hiveService.get<dynamic>(_activePlanIdKey, boxName: boxName);
+      return val?.toString();
     } catch (_) {}
     return null;
   }
@@ -122,8 +106,7 @@ class StudyPlanLocalDataSource implements IStudyPlanLocalDataSource {
   @override
   Future<void> clearAll() async {
     try {
-      final box = await _getBox();
-      await box.clear();
+      await _hiveService.clear(boxName: boxName);
     } catch (e) {
       debugPrint('⚠️ [StudyPlanDataSource] Error clearing box: $e');
     }
@@ -132,5 +115,6 @@ class StudyPlanLocalDataSource implements IStudyPlanLocalDataSource {
 
 final studyPlanLocalDataSourceProvider =
     Provider<IStudyPlanLocalDataSource>((ref) {
-  return StudyPlanLocalDataSource();
+  final hiveService = ref.read(hiveServiceProvider);
+  return StudyPlanLocalDataSource(hiveService);
 });

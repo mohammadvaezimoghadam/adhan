@@ -18,3 +18,4 @@ const String studyPlansRoute = "study_plans";
 const String createStudyPlanRoute = "create_study_plan";
 
 const String tafakorLoginRoute = "tafakor_login";
+const String audioSleepTimerRoute = "audio_sleep_timer";

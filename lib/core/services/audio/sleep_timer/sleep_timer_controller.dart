@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/data/local/preferences/preferences_service_provider.dart';
+import '../audio_player_providers.dart';
 import 'sleep_timer_condition.dart';
 import 'sleep_timer_state.dart';
 
@@ -12,30 +14,44 @@ final sleepTimerControllerProvider =
 class SleepTimerController extends Notifier<SleepTimerState> {
   Timer? _countdownTimer;
 
+  static const String _fadeOutPrefKey = 'sleep_timer_fade_out';
+
   @override
   SleepTimerState build() {
     ref.onDispose(() {
       _countdownTimer?.cancel();
     });
-    return const SleepTimerState();
+    final prefs = ref.read(preferencesServiceProvider);
+    final savedFadeOut = prefs.getBool(_fadeOutPrefKey) ?? true;
+    return SleepTimerState(isFadeOutEnabled: savedFadeOut);
+  }
+
+  /// Toggle or update the audio fade-out preference.
+  void setFadeOutEnabled(bool enabled) {
+    ref.read(preferencesServiceProvider).setBool(_fadeOutPrefKey, enabled);
+    state = state.copyWith(isFadeOutEnabled: () => enabled);
+    if (!enabled) {
+      ref.read(audioPlayerServiceProvider).setVolume(1.0);
+    }
   }
 
   /// Activate a new sleep timer condition.
   void activate(SleepTimerCondition condition) {
     _countdownTimer?.cancel();
     _countdownTimer = null;
+    ref.read(audioPlayerServiceProvider).setVolume(1.0);
 
     if (condition is TimerCondition) {
       final initialRemaining = condition.targetEndTime.difference(DateTime.now());
-      state = SleepTimerState(
-        activeCondition: condition,
-        remainingTime: initialRemaining > Duration.zero ? initialRemaining : Duration.zero,
+      state = state.copyWith(
+        activeCondition: () => condition,
+        remainingTime: () => initialRemaining > Duration.zero ? initialRemaining : Duration.zero,
       );
       _startCountdown(condition.targetEndTime);
     } else {
-      state = SleepTimerState(
-        activeCondition: condition,
-        remainingTime: null,
+      state = state.copyWith(
+        activeCondition: () => condition,
+        remainingTime: () => null,
       );
     }
   }
@@ -44,7 +60,11 @@ class SleepTimerController extends Notifier<SleepTimerState> {
   void cancel() {
     _countdownTimer?.cancel();
     _countdownTimer = null;
-    state = const SleepTimerState();
+    ref.read(audioPlayerServiceProvider).setVolume(1.0);
+    state = state.copyWith(
+      activeCondition: () => null,
+      remainingTime: () => null,
+    );
   }
 
   /// Internal periodic timer to tick down remaining time for TimerCondition.
@@ -55,8 +75,15 @@ class SleepTimerController extends Notifier<SleepTimerState> {
         timer.cancel();
         _countdownTimer = null;
         state = state.copyWith(remainingTime: () => Duration.zero);
+        if (state.isFadeOutEnabled) {
+          ref.read(audioPlayerServiceProvider).setVolume(1.0);
+        }
       } else {
         state = state.copyWith(remainingTime: () => remaining);
+        if (state.isFadeOutEnabled && remaining <= const Duration(seconds: 30)) {
+          final factor = (remaining.inMilliseconds / 30000.0).clamp(0.05, 1.0);
+          ref.read(audioPlayerServiceProvider).setVolume(factor);
+        }
       }
     });
   }
